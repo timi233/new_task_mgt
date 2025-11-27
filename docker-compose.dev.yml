@@ -1,0 +1,38 @@
+# 开发环境 docker-compose
+version: '3.8'
+
+services:
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile.dev
+    container_name: dispatch-server-dev
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - DATABASE_URL=file:./data/dev.db
+      - JWT_SECRET=dev-secret-key
+      - JWT_EXPIRES_IN=7d
+      - FEISHU_APP_ID=${FEISHU_APP_ID}
+      - FEISHU_APP_SECRET=${FEISHU_APP_SECRET}
+    volumes:
+      - ./server:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    command: npm run dev
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile.dev
+    container_name: dispatch-client-dev
+    environment:
+      - VITE_API_BASE_URL=http://localhost:3000/api
+      - VITE_FEISHU_APP_ID=${FEISHU_APP_ID}
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    command: npm run dev -- --host

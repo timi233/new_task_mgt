@@ -1,0 +1,190 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// 用户表
+model User {
+  id           String   @id @default(cuid())
+  feishuId     String?  @unique // 飞书用户ID
+  feishuUnionId String? @unique // 飞书 union_id
+  name         String
+  phone        String?
+  email        String?
+  avatar        String?
+  department   String?  // 部门（从飞书同步）
+
+  // 双重权限系统
+  functionalRole    String?  // 功能权限：TECHNICIAN | SALES | null
+  responsibilityRole String? // 职责权限：SYSTEM_ADMIN | ADMIN | AUDITOR | OTHER | null
+
+  // 旧的 role 字段（向后兼容，将逐步废弃）
+  role         String?
+
+  status       String   @default("ACTIVE")     // ACTIVE, DISABLED
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // 关联
+  submittedOrders    WorkOrder[] @relation("SubmittedOrders")   // 提交的工单
+  relatedSalesOrders WorkOrder[] @relation("RelatedSalesOrders") // 关联销售的工单
+  technicianAssignments WorkOrderTechnician[]  // 作为技术员分配的工单
+  evaluations        Evaluation[]
+
+  @@map("users")
+}
+
+// 工单表
+model WorkOrder {
+  id             String   @id @default(cuid())
+  orderNo        String   @unique // 工单编号：CF/CO/MF/MO + 日期 + 序号
+  orderType      String   @default("CF") // CF(公司外勤), CO(公司内勤), MF(厂家外勤), MO(厂家内勤)
+
+  // 提交人和关联销售
+  submitterId    String   // 提交人ID
+  relatedSalesId String?  // 关联销售ID（公司内勤，技术员提交时）
+
+  // 客户信息（直接存储，支持联想输入）
+  customerName    String   // 客户名称
+  customerContact String?  // 客户联系人
+  customerPhone   String?  // 客户电话
+
+  // 渠道信息（仅公司外勤/内勤）
+  hasChannel      Boolean  @default(false) // 是否有渠道
+  channelName     String?  // 渠道名称
+  channelContact  String?  // 渠道联系人
+  channelPhone    String?  // 渠道电话
+
+  // 厂家对接人（厂家外勤/内勤）
+  manufacturerContact String?
+
+  // 工单信息
+  workType       String?  // 工作类型（公司外勤/内勤）：COMMUNICATION, TEST, DELIVERY, ISSUE, INSPECTION, TRAINING, OTHER
+  priority       String   @default("NORMAL")  // NORMAL(普通), URGENT(紧急), VERY_URGENT(非常紧急)
+  description    String   // 工单描述
+  status         String   @default("PENDING") // PENDING, ACCEPTED, IN_SERVICE, DONE, CANCELLED, REJECTED
+
+  // 预计派工时间（已废弃，保留用于兼容）
+  estimatedDate   DateTime? // 预计派工日期（废弃）
+  estimatedPeriod String?   // AM(上午) / PM(下午)（废弃）
+
+  // 预计派工时间段（新字段）
+  estimatedStartDate   DateTime? // 预计开始日期
+  estimatedStartPeriod String?   // 预计开始时段：AM(上午) / PM(下午)
+  estimatedEndDate     DateTime? // 预计结束日期
+  estimatedEndPeriod   String?   // 预计结束时段：AM(上午) / PM(下午)
+
+  // 实际时间
+  acceptedAt     DateTime?   // 接单时间
+  startedAt      DateTime?   // 开始服务时间
+  completedAt    DateTime?   // 完成时间
+
+  // 服务信息
+  serviceSummary String?     // 服务小结
+  cancelReason   String?     // 取消/拒绝原因
+
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  // 关联
+  submitter      User    @relation("SubmittedOrders", fields: [submitterId], references: [id])
+  relatedSales   User?   @relation("RelatedSalesOrders", fields: [relatedSalesId], references: [id])
+  technicians    WorkOrderTechnician[]  // 多个技术人员
+  evaluation     Evaluation?
+
+  @@map("work_orders")
+}
+
+// 工单-技术人员关联表（多对多）
+model WorkOrderTechnician {
+  id           String   @id @default(cuid())
+  workOrderId  String
+  technicianId String
+  createdAt    DateTime @default(now())
+
+  workOrder  WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  technician User      @relation(fields: [technicianId], references: [id])
+
+  @@unique([workOrderId, technicianId])
+  @@map("work_order_technicians")
+}
+
+// 评价表
+model Evaluation {
+  id                    String   @id @default(cuid())
+  workOrderId           String   @unique
+  qualityRating         Int      // 服务质量评分 1-5
+  responseRating        Int      // 响应速度评分 1-5
+  customerFeedback      String?  // 客户反馈
+  improvementSuggestion String?  // 改进建议
+  recommend             Boolean  @default(false) // 是否推荐
+  evaluatorId           String   // 评价人
+  createdAt             DateTime @default(now())
+
+  // 关联
+  workOrder WorkOrder @relation(fields: [workOrderId], references: [id])
+  evaluator User      @relation(fields: [evaluatorId], references: [id])
+
+  @@map("evaluations")
+}
+
+// 客户记录表（用于联想输入）
+model CustomerRecord {
+  id            String   @id @default(cuid())
+  name          String   @unique // 客户名称
+  contactPerson String?  // 联系人
+  contactPhone  String?  // 联系电话
+  usageCount    Int      @default(1) // 使用次数
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("customer_records")
+}
+
+// 渠道记录表（用于联想输入）
+model ChannelRecord {
+  id            String   @id @default(cuid())
+  name          String   @unique // 渠道名称
+  contactPerson String?  // 联系人
+  contactPhone  String?  // 联系电话
+  usageCount    Int      @default(1) // 使用次数
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("channel_records")
+}
+
+// 厂家对接人记录表（用于联想输入）
+model ManufacturerContactRecord {
+  id         String   @id @default(cuid())
+  name       String   @unique // 对接人名称
+  usageCount Int      @default(1) // 使用次数
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("manufacturer_contact_records")
+}
+
+// 知识库表
+model Knowledge {
+  id          String   @id @default(cuid())
+  title       String
+  problemType String?  // 问题类型
+  problem     String   // 问题描述
+  solution    String   // 解决方案
+  tags        String?  // 标签，逗号分隔
+  sourceType  String   @default("manual") // 来源：manual/work_order
+  sourceId    String?  // 来源ID（工单ID）
+  viewCount   Int      @default(0) // 浏览次数
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("knowledge")
+}
