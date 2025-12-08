@@ -1,0 +1,342 @@
+// 全局样式
+
+// 变量
+:root {
+  --primary-color: #2563eb;
+  --primary-color-strong: #1d4ed8;
+  --primary-color-weak: #93c5fd;
+  --success-color: #16a34a;
+  --warning-color: #f97316;
+  --danger-color: #dc2626;
+  --text-color: #1f2937;
+  --text-color-2: #6b7280;
+  --text-color-3: #9ca3af;
+  --background-color: #f5f7fb;
+  --border-color: #e5e7eb;
+  --desktop-header-height: 64px;
+  --desktop-sidebar-width: 240px;
+  --desktop-sidebar-collapsed-width: 72px;
+  --desktop-page-bg: #f0f2f5;
+  --desktop-card-bg: #ffffff;
+  --desktop-border-color: #e2e8f0;
+  --desktop-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --desktop-shadow-strong: 0 12px 32px rgba(37, 99, 235, 0.18);
+  --desktop-radius: 12px;
+  --desktop-chip-bg: #eef2ff;
+  --desktop-chip-text: #4338ca;
+  --desktop-table-header-bg: #f8fafc;
+  --desktop-table-hover: #f0f7ff;
+  --desktop-empty-bg: #f9fafb;
+}
+
+// 重置样式
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica,
+    'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', Arial, sans-serif;
+  font-size: 14px;
+  color: var(--text-color);
+  background-color: var(--background-color);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body.desktop-mode {
+  background-color: var(--desktop-page-bg);
+  color: var(--text-color);
+  font-size: 14px;
+}
+
+.desktop-page {
+  min-height: 100vh;
+  padding: 24px;
+  background: var(--desktop-page-bg);
+}
+
+.desktop-page .el-card {
+  border-radius: var(--desktop-radius);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  margin-bottom: 16px;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+}
+
+.desktop-page .el-card__header {
+  font-size: 16px;
+  font-weight: 600;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+.desktop-page .section-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  color: var(--text-color);
+}
+
+#app {
+  height: 100%;
+}
+
+// 按钮体系
+.desktop-page .el-button {
+  border-radius: 999px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  height: 36px;
+  padding: 0 20px;
+}
+
+.desktop-page .el-button--primary:not(.is-text) {
+  background-image: linear-gradient(100deg, var(--primary-color) 0%, var(--primary-color-strong) 100%);
+  border: none;
+  box-shadow: var(--desktop-shadow-strong);
+}
+
+.desktop-page .el-button--primary.is-plain {
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--primary-color);
+  border-color: rgba(37, 99, 235, 0.3);
+  box-shadow: none;
+}
+
+.desktop-page .el-button.is-text {
+  color: var(--primary-color);
+  font-weight: 500;
+}
+
+.desktop-page .el-button--danger {
+  background: rgba(220, 38, 38, 0.08);
+  color: var(--danger-color);
+  border-color: rgba(220, 38, 38, 0.3);
+  box-shadow: none;
+}
+
+// 表格规范
+.desktop-page .el-table {
+  border-radius: var(--desktop-radius);
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.desktop-page .el-table th {
+  background: var(--desktop-table-header-bg);
+  color: var(--text-color-2);
+  font-weight: 600;
+}
+
+.desktop-page .el-table .cell {
+  color: var(--text-color);
+}
+
+.desktop-page .el-table--striped .el-table__body tr.el-table__row--striped > td {
+  background-color: rgba(59, 130, 246, 0.04);
+}
+
+.desktop-page .el-table tbody tr:hover > td {
+  background: var(--desktop-table-hover);
+}
+
+.desktop-page .el-table .el-table__cell {
+  border-bottom: 1px solid rgba(226, 232, 240, 0.6);
+}
+
+// 通用类
+.page {
+  min-height: 100vh;
+  padding-bottom: constant(safe-area-inset-bottom);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.page-with-tabbar {
+  padding-bottom: calc(50px + constant(safe-area-inset-bottom));
+  padding-bottom: calc(50px + env(safe-area-inset-bottom));
+}
+
+// 卡片样式
+.card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin: 12px;
+
+  &-title {
+    font-size: 16px;
+    font-weight: 500;
+    margin-bottom: 12px;
+  }
+}
+
+// 状态标签
+.status-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+
+  &--pending {
+    background: #fff7e6;
+    color: #fa8c16;
+  }
+
+  &--accepted {
+    background: #e6f7ff;
+    color: #1890ff;
+  }
+
+  &--in-service {
+    background: #f6ffed;
+    color: #52c41a;
+  }
+
+  &--done {
+    background: #f0f0f0;
+    color: #666;
+  }
+
+  &--cancelled {
+    background: #fff1f0;
+    color: #ff4d4f;
+  }
+
+  &--rejected {
+    background: #fff1f0;
+    color: #ff4d4f;
+  }
+}
+
+// 优先级标签
+.priority-tag {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+
+  &--urgent {
+    background: #ff4d4f;
+    color: #fff;
+  }
+
+  &--high {
+    background: #fa8c16;
+    color: #fff;
+  }
+
+  &--normal {
+    background: #52c41a;
+    color: #fff;
+  }
+
+  &--low {
+    background: #d9d9d9;
+    color: #666;
+  }
+}
+
+// 空状态
+.empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-color-2);
+  background: var(--desktop-empty-bg);
+  border-radius: var(--desktop-radius);
+  border: 1px dashed rgba(148, 163, 184, 0.6);
+
+  &-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+  }
+
+  &-text {
+    font-size: 14px;
+  }
+}
+
+// 过滤 Chip
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--desktop-chip-bg);
+  color: var(--desktop-chip-text);
+  font-size: 12px;
+  font-weight: 500;
+  margin-right: 8px;
+  margin-bottom: 8px;
+
+  &__remove {
+    cursor: pointer;
+    font-size: 12px;
+  }
+}
+
+// 列表项
+.list-item {
+  background: #fff;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &-title {
+    font-size: 15px;
+    font-weight: 500;
+    margin-bottom: 8px;
+  }
+
+  &-desc {
+    font-size: 13px;
+    color: var(--text-color-2);
+    line-height: 1.5;
+  }
+
+  &-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--text-color-3);
+  }
+}
+
+// flex 布局
+.flex {
+  display: flex;
+
+  &-center {
+    justify-content: center;
+    align-items: center;
+  }
+
+  &-between {
+    justify-content: space-between;
+  }
+
+  &-wrap {
+    flex-wrap: wrap;
+  }
+}
+
+// 间距
+.mt-8 { margin-top: 8px; }
+.mt-12 { margin-top: 12px; }
+.mt-16 { margin-top: 16px; }
+.mb-8 { margin-bottom: 8px; }
+.mb-12 { margin-bottom: 12px; }
+.mb-16 { margin-bottom: 16px; }
+.ml-8 { margin-left: 8px; }
+.mr-8 { margin-right: 8px; }
+.p-12 { padding: 12px; }
+.p-16 { padding: 16px; }
