@@ -3,17 +3,22 @@ import fs from 'fs';
 import { authenticate, AuthRequest, ApiError } from '../middlewares';
 import { followUpUpload } from '../middlewares/upload';
 import { prisma, success } from '../utils';
+import { hasManagementRole } from '../types';
 
 const router = Router();
 
 // 检查用户是否有权限操作该工单的跟进记录
-async function checkFollowUpAccess(userId: string, workOrderId: string): Promise<boolean> {
+async function checkFollowUpAccess(user: any, workOrderId: string): Promise<boolean> {
+  // 管理员可以查看所有工单的跟进记录
+  if (hasManagementRole(user)) return true;
+
   const workOrder = await prisma.workOrder.findUnique({
     where: { id: workOrderId },
     include: { technicians: true },
   });
   if (!workOrder) return false;
 
+  const userId = user.id;
   const isSubmitter = workOrder.submitterId === userId;
   const isRelatedSales = workOrder.relatedSalesId === userId;
   const isTechnician = workOrder.technicians.some(t => t.technicianId === userId);
@@ -25,10 +30,10 @@ async function checkFollowUpAccess(userId: string, workOrderId: string): Promise
 async function requireFollowUpAccess(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const { id } = req.params;
-    const userId = req.user!.id;
+    const user = req.user!;
 
     // 验证工单存在且用户有权限
-    const hasAccess = await checkFollowUpAccess(userId, id);
+    const hasAccess = await checkFollowUpAccess(user, id);
     if (!hasAccess) {
       throw new ApiError('无权操作该工单的跟进记录', 403);
     }
@@ -55,9 +60,9 @@ function formatAttachment(att: any) {
 router.get('/:id/follow-ups', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    const userId = req.user!.id;
+    const user = req.user!;
 
-    const hasAccess = await checkFollowUpAccess(userId, id);
+    const hasAccess = await checkFollowUpAccess(user, id);
     if (!hasAccess) {
       throw new ApiError('无权查看该工单的跟进记录', 403);
     }
@@ -169,7 +174,7 @@ router.delete('/:id/follow-ups/:noteId', authenticate, async (req: AuthRequest, 
 router.get('/attachments/:attachmentId', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { attachmentId } = req.params;
-    const userId = req.user!.id;
+    const user = req.user!;
 
     const attachment = await prisma.workOrderFollowUpAttachment.findUnique({
       where: { id: attachmentId },
@@ -180,7 +185,7 @@ router.get('/attachments/:attachmentId', authenticate, async (req: AuthRequest, 
       throw new ApiError('附件不存在', 404);
     }
 
-    const hasAccess = await checkFollowUpAccess(userId, attachment.followUp.workOrderId);
+    const hasAccess = await checkFollowUpAccess(user, attachment.followUp.workOrderId);
     if (!hasAccess) {
       throw new ApiError('无权下载该附件', 403);
     }

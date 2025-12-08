@@ -493,6 +493,7 @@ import {
   isTechnician as checkTechnician,
   isSales,
   isAdmin,
+  isSystemAdmin,
 } from '@/types/enums';
 import dayjs from 'dayjs';
 
@@ -534,7 +535,17 @@ const isSubmitterOrSales = computed(() => {
 });
 
 const canViewFollowUp = computed(() => {
-  return isTechnician.value || isSubmitterOrSales.value;
+  if (!order.value) return false;
+  const user = userStore.user;
+  if (!user?.id) return false;
+  // 管理员可以查看所有工单的跟进记录
+  if (isAdmin(user) || isSystemAdmin(user)) return true;
+  // 其他用户需要是工单相关人员
+  const userId = user.id;
+  const isSubmitter = order.value.submitterId === userId;
+  const isRelatedSales = order.value.relatedSalesId === userId;
+  const isAssignedTech = order.value.technicianList?.some((t: any) => t.id === userId);
+  return isSubmitter || isRelatedSales || isAssignedTech;
 });
 
 const showActions = computed(() => {
