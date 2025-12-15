@@ -90,8 +90,9 @@ model WorkOrder {
   completedAt    DateTime?   // 完成时间
 
   // 服务信息
-  serviceSummary String?     // 服务小结
-  cancelReason   String?     // 取消/拒绝原因
+  serviceSummary    String?     // 服务小结
+  actualServiceDays Float?      // 实际服务时间（天）
+  cancelReason      String?     // 取消/拒绝原因
 
   // 飞书审批信息（外出审批）
   approvalInstanceCode String?   // 飞书审批实例ID
@@ -207,6 +208,8 @@ model WorkOrderFollowUp {
   authorId    String
   content     String?
   createdAt   DateTime  @default(now())
+  updatedAt   DateTime?
+  updatedById String?
   deletedAt   DateTime?
 
   workOrder   WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)

@@ -7,7 +7,7 @@
         <van-empty v-else-if="followUps.length === 0" description="暂无跟进记录" />
 
         <div v-else class="note-list">
-          <div v-for="note in followUps" :key="note.id" class="note-card">
+          <div v-for="note in followUps" :key="note.id" class="note-card" :class="{ deleted: note.deletedAt }">
             <div class="note-header">
               <div class="user-info">
                 <van-image
@@ -19,24 +19,31 @@
                 <div class="meta">
                   <span class="name">{{ note.author.name }}</span>
                   <span class="time">{{ formatTime(note.createdAt) }}</span>
+                  <span v-if="note.updatedAt" class="edited">(已在{{ formatTime(note.updatedAt) }}修改)</span>
+                  <span v-if="note.deletedAt" class="deleted-tag">[已删除]</span>
                 </div>
               </div>
-              <van-icon
-                v-if="note.authorId === userId"
-                name="delete-o"
-                class="delete-icon"
-                @click="handleDelete(note.id)"
-              />
+              <div v-if="!note.deletedAt" class="actions">
+                <van-icon name="edit" class="action-icon" @click="startEdit(note)" />
+                <van-icon v-if="note.authorId === userId" name="delete-o" class="action-icon" @click="handleDelete(note.id)" />
+              </div>
             </div>
 
-            <div v-if="note.content" class="note-content">{{ note.content }}</div>
+            <template v-if="editingId === note.id">
+              <van-field v-model="editContent" type="textarea" rows="2" autosize placeholder="编辑内容" />
+              <div class="edit-actions">
+                <van-button size="small" @click="cancelEdit">取消</van-button>
+                <van-button size="small" type="primary" @click="handleUpdate(note.id)">保存</van-button>
+              </div>
+            </template>
+            <div v-else-if="note.content" class="note-content">{{ note.content }}</div>
 
             <div v-if="note.attachments.length" class="attachment-grid">
               <template v-for="att in note.attachments" :key="att.id">
                 <van-image
                   v-if="att.type === 'IMAGE'"
                   fit="cover"
-                  :src="att.url"
+                  :src="getAttachmentUrl(att.id)"
                   class="grid-img"
                   @click="previewImages(note.attachments, att.id)"
                 />
@@ -90,6 +97,7 @@ import dayjs from 'dayjs';
 const props = defineProps<{
   workOrderId: string;
   userId: string;
+  isSystemAdmin?: boolean;
 }>();
 
 const activeNames = ref(['followUp']);
@@ -98,8 +106,11 @@ const submitting = ref(false);
 const followUps = ref<any[]>([]);
 const newContent = ref('');
 const fileList = ref<any[]>([]);
+const editingId = ref<string | null>(null);
+const editContent = ref('');
 
 const formatTime = (time: string) => dayjs(time).format('MM-DD HH:mm');
+const getAttachmentUrl = (id: string) => followUpApi.getAttachmentUrl(id);
 
 const fetchFollowUps = async () => {
   loading.value = true;
@@ -153,16 +164,36 @@ const handleDelete = async (noteId: string) => {
   }
 };
 
+const startEdit = (note: any) => {
+  editingId.value = note.id;
+  editContent.value = note.content || '';
+};
+
+const cancelEdit = () => {
+  editingId.value = null;
+  editContent.value = '';
+};
+
+const handleUpdate = async (noteId: string) => {
+  try {
+    await followUpApi.update(props.workOrderId, noteId, editContent.value);
+    showToast('修改成功');
+    editingId.value = null;
+    fetchFollowUps();
+  } catch {
+    showToast('修改失败');
+  }
+};
+
 const previewImages = (attachments: any[], clickedId: string) => {
   const images = attachments.filter((a: any) => a.type === 'IMAGE');
-  const urls = images.map((a: any) => a.url);
+  const urls = images.map((a: any) => followUpApi.getAttachmentUrl(a.id));
   const startPosition = images.findIndex((a: any) => a.id === clickedId);
   showImagePreview({ images: urls, startPosition: Math.max(0, startPosition) });
 };
 
 const downloadFile = (att: any) => {
-  // 通过认证的 API 端点下载
-  window.open(att.url, '_blank');
+  window.open(followUpApi.getAttachmentUrl(att.id), '_blank');
 };
 
 onMounted(() => {
@@ -187,6 +218,11 @@ onMounted(() => {
   margin-bottom: 12px;
   border: 1px solid #ebedf0;
 
+  &.deleted {
+    opacity: 0.6;
+    background: #f5f5f5;
+  }
+
   .note-header {
     display: flex;
     justify-content: space-between;
@@ -203,14 +239,23 @@ onMounted(() => {
         flex-direction: column;
         .name { font-weight: 500; font-size: 14px; color: #323233; }
         .time { font-size: 11px; color: #969799; }
+        .edited { font-size: 11px; color: #ff976a; }
+        .deleted-tag { font-size: 11px; color: #ee0a24; }
       }
     }
 
-    .delete-icon {
-      color: #969799;
-      font-size: 18px;
-      padding: 4px;
+    .actions {
+      display: flex;
+      gap: 8px;
+      .action-icon { color: #969799; font-size: 18px; padding: 4px; }
     }
+  }
+
+  .edit-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 8px;
   }
 
   .note-content {

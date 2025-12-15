@@ -158,5 +158,10 @@ export const followUpApi = {
   create: (workOrderId: string, formData: FormData) => api.post(`/workorders/${workOrderId}/follow-ups`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   }),
+  update: (workOrderId: string, noteId: string, content: string) => api.put(`/workorders/${workOrderId}/follow-ups/${noteId}`, { content }),
   delete: (workOrderId: string, noteId: string) => api.delete(`/workorders/${workOrderId}/follow-ups/${noteId}`),
+  getAttachmentUrl: (attachmentId: string) => {
+    const token = localStorage.getItem('token');
+    return `/api/follow-ups/attachments/${attachmentId}?token=${token}`;
+  },
 };

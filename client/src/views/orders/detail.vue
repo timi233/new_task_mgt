@@ -108,6 +108,9 @@
               <el-descriptions-item v-if="order.completedAt" label="完成时间">
                 {{ formatTime(order.completedAt) }}
               </el-descriptions-item>
+              <el-descriptions-item v-if="order.actualServiceDays !== null && order.actualServiceDays !== undefined" label="实际服务时间">
+                {{ order.actualServiceDays }} 天
+              </el-descriptions-item>
             </el-descriptions>
           </el-card>
         </el-col>
@@ -135,7 +138,7 @@
           </el-card>
         </el-col>
 
-        <el-col :span="24" v-if="canViewFollowUp">
+        <el-col :span="24" v-if="['IN_SERVICE', 'DONE'].includes(order.status)">
           <FollowUpListDesktop
             :work-order-id="orderId"
             :user-id="userStore.user?.id || ''"
@@ -235,7 +238,7 @@
         title="完成服务"
         width="480px"
       >
-        <el-form @submit.prevent>
+        <el-form @submit.prevent label-width="100px">
           <el-form-item label="服务小结" required>
             <el-input
               v-model="completeForm.serviceSummary"
@@ -243,6 +246,15 @@
               :rows="4"
               placeholder="请输入服务小结"
             />
+          </el-form-item>
+          <el-form-item label="实际服务时间" required>
+            <el-input
+              v-model="completeForm.actualServiceDays"
+              placeholder="请输入天数"
+              style="width: 150px"
+            >
+              <template #append>天</template>
+            </el-input>
           </el-form-item>
         </el-form>
         <template #footer>
@@ -328,6 +340,7 @@
         <van-cell v-if="order.acceptedAt" title="接单时间" :value="formatTime(order.acceptedAt)" />
         <van-cell v-if="order.startedAt" title="开始服务" :value="formatTime(order.startedAt)" />
         <van-cell v-if="order.completedAt" title="完成时间" :value="formatTime(order.completedAt)" />
+        <van-cell v-if="order.actualServiceDays !== null && order.actualServiceDays !== undefined" title="实际服务时间" :value="`${order.actualServiceDays} 天`" />
       </van-cell-group>
 
       <!-- 服务信息（已完成时显示） -->
@@ -351,9 +364,9 @@
         <van-cell v-if="order.evaluation.improvementSuggestion" title="改进建议" :label="order.evaluation.improvementSuggestion" />
       </van-cell-group>
 
-      <!-- 跟进记录 -->
+      <!-- 跟进记录（服务中及已完成时显示） -->
       <FollowUpList
-        v-if="canViewFollowUp"
+        v-if="['IN_SERVICE', 'DONE'].includes(order.status)"
         :work-order-id="orderId"
         :user-id="userStore.user?.id || ''"
         style="margin-top: 12px"
@@ -468,6 +481,16 @@
               required
               :rules="[{ required: true, message: '请输入服务小结' }]"
             />
+            <van-field
+              v-model="completeForm.actualServiceDays"
+              type="number"
+              label="实际服务时间"
+              placeholder="请输入天数"
+              required
+              :rules="[{ required: true, message: '请输入实际服务时间' }]"
+            >
+              <template #button>天</template>
+            </van-field>
           </van-cell-group>
           <div style="margin: 16px">
             <van-button type="primary" block native-type="submit">确认完成</van-button>
@@ -493,7 +516,6 @@ import {
   isTechnician as checkTechnician,
   isSales,
   isAdmin,
-  isSystemAdmin,
 } from '@/types/enums';
 import dayjs from 'dayjs';
 
@@ -514,6 +536,7 @@ const rejectReason = ref('');
 const cancelReason = ref('');
 const completeForm = ref({
   serviceSummary: '',
+  actualServiceDays: '',
 });
 
 const technicianNames = computed(() => {
@@ -534,19 +557,6 @@ const isSubmitterOrSales = computed(() => {
   return order.value.submitterId === userId || order.value.relatedSalesId === userId;
 });
 
-const canViewFollowUp = computed(() => {
-  if (!order.value) return false;
-  const user = userStore.user;
-  if (!user?.id) return false;
-  // 管理员可以查看所有工单的跟进记录
-  if (isAdmin(user) || isSystemAdmin(user)) return true;
-  // 其他用户需要是工单相关人员
-  const userId = user.id;
-  const isSubmitter = order.value.submitterId === userId;
-  const isRelatedSales = order.value.relatedSalesId === userId;
-  const isAssignedTech = order.value.technicianList?.some((t: any) => t.id === userId);
-  return isSubmitter || isRelatedSales || isAssignedTech;
-});
 
 const showActions = computed(() => {
   if (!order.value) return false;

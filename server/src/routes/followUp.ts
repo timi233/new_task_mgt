@@ -3,7 +3,7 @@ import fs from 'fs';
 import { authenticate, AuthRequest, ApiError } from '../middlewares';
 import { followUpUpload } from '../middlewares/upload';
 import { prisma, success } from '../utils';
-import { hasManagementRole } from '../types';
+import { hasManagementRole, isSystemAdmin } from '../types';
 
 const router = Router();
 
@@ -67,8 +67,13 @@ router.get('/:id/follow-ups', authenticate, async (req: AuthRequest, res: Respon
       throw new ApiError('无权查看该工单的跟进记录', 403);
     }
 
+    // 系统管理员可以看到已删除的记录
+    const whereClause = isSystemAdmin(user)
+      ? { workOrderId: id }
+      : { workOrderId: id, deletedAt: null };
+
     const followUps = await prisma.workOrderFollowUp.findMany({
-      where: { workOrderId: id, deletedAt: null },
+      where: whereClause,
       include: {
         author: { select: { id: true, name: true, avatar: true, functionalRole: true } },
         attachments: true,
@@ -141,7 +146,42 @@ router.post('/:id/follow-ups', authenticate, requireFollowUpAccess, followUpUplo
   }
 });
 
-// 删除跟进记录（软删除）
+// 修改跟进记录（工单关联人员可修改）
+router.put('/:id/follow-ups/:noteId', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id, noteId } = req.params;
+    const { content } = req.body;
+    const user = req.user!;
+
+    const hasAccess = await checkFollowUpAccess(user, id);
+    if (!hasAccess) {
+      throw new ApiError('无权修改该工单的跟进记录', 403);
+    }
+
+    const followUp = await prisma.workOrderFollowUp.findUnique({
+      where: { id: noteId },
+    });
+
+    if (!followUp || followUp.workOrderId !== id || followUp.deletedAt) {
+      throw new ApiError('跟进记录不存在', 404);
+    }
+
+    const updated = await prisma.workOrderFollowUp.update({
+      where: { id: noteId },
+      data: { content: content?.trim() || null, updatedAt: new Date(), updatedById: user.id },
+      include: {
+        author: { select: { id: true, name: true, avatar: true, functionalRole: true } },
+        attachments: true,
+      },
+    });
+
+    success(res, { ...updated, attachments: updated.attachments.map(formatAttachment) }, '修改成功');
+  } catch (error) {
+    next(error);
+  }
+});
+
+// 删除跟进记录（软删除，仅作者可删除）
 router.delete('/:id/follow-ups/:noteId', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { id, noteId } = req.params;

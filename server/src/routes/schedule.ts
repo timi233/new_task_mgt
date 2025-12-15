@@ -46,12 +46,13 @@ router.get('/', async (req: AuthRequest, res: Response, next: NextFunction) => {
     const exclusiveEnd = new Date(friday);
     exclusiveEnd.setUTCDate(exclusiveEnd.getUTCDate() + 1);
 
-    // 构建查询条件
+    // 构建查询条件：工单的预计时间范围与本周有交集
     const where: any = {
-      estimatedStartDate: {
-        gte: monday,
-        lt: exclusiveEnd,
-      },
+      estimatedStartDate: { lt: exclusiveEnd },
+      OR: [
+        { estimatedEndDate: { gte: monday } },
+        { estimatedEndDate: null, estimatedStartDate: { gte: monday } },
+      ],
     };
 
     // 权限过滤：管理员/审计看所有，技术/销售只看自己相关的
@@ -77,6 +78,7 @@ router.get('/', async (req: AuthRequest, res: Response, next: NextFunction) => {
         customerName: true,
         description: true,
         estimatedStartDate: true,
+        estimatedEndDate: true,
         technicians: {
           select: {
             technicianId: true,
@@ -120,33 +122,42 @@ router.get('/', async (req: AuthRequest, res: Response, next: NextFunction) => {
 
     orders.forEach(order => {
       if (!order.estimatedStartDate) return;
-      const dayKey = new Date(order.estimatedStartDate).toISOString().split('T')[0];
-      order.technicians.forEach(assignment => {
-        const techId = assignment.technicianId;
-        if (!techniciansMap.has(techId)) {
-          techniciansMap.set(techId, {
-            id: techId,
-            name: assignment.technician?.name || '未知工程师',
-            assignments: [],
+      const startDate = new Date(order.estimatedStartDate);
+      const endDate = order.estimatedEndDate ? new Date(order.estimatedEndDate) : startDate;
+
+      // 遍历本周每一天，检查是否在工单的日期范围内
+      const startKey = startDate.toISOString().split('T')[0];
+      const endKey = endDate.toISOString().split('T')[0];
+      days.forEach(day => {
+        if (day.key < startKey || day.key > endKey) return;
+
+        order.technicians.forEach(assignment => {
+          const techId = assignment.technicianId;
+          if (!techniciansMap.has(techId)) {
+            techniciansMap.set(techId, {
+              id: techId,
+              name: assignment.technician?.name || '未知工程师',
+              assignments: [],
+            });
+          }
+
+          // 判断是否是当前用户相关的任务
+          const isOwn = hasManagementRole(user) || // 管理员能看所有详情
+            (isTechnician(user) && techId === user.id) || // 技术员看自己的
+            (isSales(user) && ( // 销售看自己提交/关联的
+              order.technicians.some(t => t.technicianId === user.id)
+            ));
+
+          techniciansMap.get(techId)!.assignments.push({
+            day: day.key,
+            orderId: order.id,
+            orderNo: order.orderNo,
+            // 隐私处理：非自己相关的任务只显示客户名称，不显示详情
+            customerName: isOwn ? order.customerName : '***',
+            orderType: order.orderType,
+            description: isOwn ? order.description : null,
+            isOwn,
           });
-        }
-
-        // 判断是否是当前用户相关的任务
-        const isOwn = hasManagementRole(user) || // 管理员能看所有详情
-          (isTechnician(user) && techId === user.id) || // 技术员看自己的
-          (isSales(user) && ( // 销售看自己提交/关联的
-            order.technicians.some(t => t.technicianId === user.id)
-          ));
-
-        techniciansMap.get(techId)!.assignments.push({
-          day: dayKey,
-          orderId: order.id,
-          orderNo: order.orderNo,
-          // 隐私处理：非自己相关的任务只显示客户名称，不显示详情
-          customerName: isOwn ? order.customerName : '***',
-          orderType: order.orderType,
-          description: isOwn ? order.description : null,
-          isOwn,
         });
       });
     });

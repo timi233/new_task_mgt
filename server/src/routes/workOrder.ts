@@ -574,7 +574,7 @@ router.post('/:id/start', authorize(...canManageOrders), async (req: AuthRequest
 router.post('/:id/complete', authorize(...canManageOrders), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    const { serviceSummary } = req.body;
+    const { serviceSummary, actualServiceDays } = req.body;
     const user = req.user!;
 
     const order = await prisma.workOrder.findUnique({
@@ -588,12 +588,20 @@ router.post('/:id/complete', authorize(...canManageOrders), async (req: AuthRequ
     if (!serviceSummary) {
       throw ApiError.badRequest('请填写服务小结');
     }
+    if (actualServiceDays === undefined || actualServiceDays === null || actualServiceDays === '') {
+      throw ApiError.badRequest('请填写实际服务时间');
+    }
+    const days = parseFloat(actualServiceDays);
+    if (isNaN(days) || days < 0) {
+      throw ApiError.badRequest('实际服务时间格式不正确');
+    }
 
     const updated = await prisma.workOrder.update({
       where: { id },
       data: {
         status: OrderStatus.DONE,
         serviceSummary,
+        actualServiceDays: Math.round(days * 10) / 10,
         completedAt: new Date(),
       },
     });
