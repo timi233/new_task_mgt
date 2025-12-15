@@ -41,6 +41,11 @@
             <el-tag :type="statusTag(row.status)">{{ statusText(row.status) }}</el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="实际服务时间" width="140">
+          <template #default="{ row }">
+            {{ formatActualServiceDays(row) }}
+          </template>
+        </el-table-column>
       </el-table>
       <div class="table-footer">
         <el-button @click="loadMore" :loading="loading" :disabled="finished">
@@ -67,6 +72,9 @@
           <el-descriptions-item label="提交时间">{{ formatDate(currentOrder.createdAt) }}</el-descriptions-item>
           <el-descriptions-item v-if="currentOrder.completedAt" label="完成时间">
             {{ formatDate(currentOrder.completedAt) }}
+          </el-descriptions-item>
+          <el-descriptions-item label="实际服务时间">
+            {{ formatActualServiceDays(currentOrder) }}
           </el-descriptions-item>
         </el-descriptions>
         <div class="drawer-footer">
@@ -125,6 +133,10 @@
               <span class="label">提交时间：</span>
               <span>{{ formatDate(order.createdAt) }}</span>
             </div>
+            <div class="info-row">
+              <span class="label">实际服务时间：</span>
+              <span>{{ formatActualServiceDays(order) }}</span>
+            </div>
           </div>
         </div>
 
@@ -148,6 +160,7 @@
           <van-cell v-if="currentOrder.serviceSummary" title="服务小结" :label="currentOrder.serviceSummary" />
           <van-cell title="提交时间" :value="formatDate(currentOrder.createdAt)" />
           <van-cell v-if="currentOrder.completedAt" title="完成时间" :value="formatDate(currentOrder.completedAt)" />
+          <van-cell title="实际服务时间" :value="formatActualServiceDays(currentOrder)" />
         </van-cell-group>
 
         <div style="padding: 16px">
@@ -227,6 +240,12 @@ const getTechnicianNames = (order: any) => {
 const formatDate = (date: string | null) => {
   if (!date) return '-';
   return dayjs(date).format('YYYY-MM-DD HH:mm');
+};
+
+const formatActualServiceDays = (order: any) => {
+  if (order.status !== OrderStatus.DONE) return '工单暂未结束';
+  if (order.actualServiceDays == null) return '-';
+  return `${order.actualServiceDays}天`;
 };
 
 const fetchOrders = async (isRefresh = false) => {
@@ -325,6 +344,7 @@ const exportManufacturer = async () => {
     { label: '工单状态', value: (row: any) => statusText(row.status) },
     { label: '提交时间', value: (row: any) => formatDate(row.createdAt) },
     { label: '完成时间', value: (row: any) => formatDate(row.completedAt) },
+    { label: '实际服务时间', value: (row: any) => formatActualServiceDays(row) },
     { label: '描述', value: (row: any) => row.description || '' },
   ];
   try {
