@@ -36,14 +36,23 @@ export const generateOrderNo = async (orderType: string): Promise<string> => {
   return `${prefix}${String(sequence).padStart(3, '0')}`;
 };
 
-// 格式化日期
+// 格式化日期 (北京时间)
 export const formatDate = (date: Date): string => {
-  return date.toISOString().slice(0, 10);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
-// 格式化日期时间
+// 格式化日期时间 (北京时间)
 export const formatDateTime = (date: Date): string => {
-  return date.toISOString().slice(0, 19).replace('T', ' ');
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 };
 
 // 计算工时差

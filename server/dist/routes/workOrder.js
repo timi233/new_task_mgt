@@ -375,12 +375,15 @@ router.post('/:id/accept', (0, middlewares_1.authorize)(...canManageOrders), asy
                     const instanceCode = await approvalService.createApprovalInstance({
                         workOrderId: order.id,
                         orderNo: order.orderNo,
+                        orderType: order.orderType,
                         customerName: order.customerName,
                         description: order.description,
                         customerContact: order.customerContact || undefined,
                         customerPhone: order.customerPhone || undefined,
                         estimatedStartDate: order.estimatedStartDate || undefined,
+                        estimatedStartPeriod: order.estimatedStartPeriod || undefined,
                         estimatedEndDate: order.estimatedEndDate || undefined,
+                        estimatedEndPeriod: order.estimatedEndPeriod || undefined,
                         userId: technician.feishuUserId,
                     });
                     if (instanceCode) {
@@ -511,7 +514,7 @@ router.post('/:id/start', (0, middlewares_1.authorize)(...canManageOrders), asyn
 router.post('/:id/complete', (0, middlewares_1.authorize)(...canManageOrders), async (req, res, next) => {
     try {
         const { id } = req.params;
-        const { serviceSummary } = req.body;
+        const { serviceSummary, actualServiceDays } = req.body;
         const user = req.user;
         const order = await utils_1.prisma.workOrder.findUnique({
             where: { id },
@@ -524,11 +527,19 @@ router.post('/:id/complete', (0, middlewares_1.authorize)(...canManageOrders), a
         if (!serviceSummary) {
             throw middlewares_1.ApiError.badRequest('请填写服务小结');
         }
+        if (actualServiceDays === undefined || actualServiceDays === null || actualServiceDays === '') {
+            throw middlewares_1.ApiError.badRequest('请填写实际服务时间');
+        }
+        const days = parseFloat(actualServiceDays);
+        if (isNaN(days) || days < 0) {
+            throw middlewares_1.ApiError.badRequest('实际服务时间格式不正确');
+        }
         const updated = await utils_1.prisma.workOrder.update({
             where: { id },
             data: {
                 status: types_1.OrderStatus.DONE,
                 serviceSummary,
+                actualServiceDays: Math.round(days * 10) / 10,
                 completedAt: new Date(),
             },
         });

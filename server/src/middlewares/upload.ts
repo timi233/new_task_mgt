@@ -32,7 +32,8 @@ const storage = multer.diskStorage({
     // 在文件名后添加日期后缀：filename_YYYYMMDD.ext
     const ext = path.extname(file.originalname);
     const baseName = path.basename(file.originalname, ext);
-    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
     file.originalname = `${baseName}_${dateStr}${ext}`;
     // 只允许安全的扩展名
     const safeExt = ext.toLowerCase().match(/^\.[a-z0-9]{1,10}$/) ? ext.toLowerCase() : '';

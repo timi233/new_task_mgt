@@ -66,12 +66,19 @@ export const authenticate = async (
 ) => {
   try {
     const authHeader = req.headers.authorization;
+    // 支持从 query 参数获取 token（用于附件下载等场景）
+    const queryToken = req.query.token as string | undefined;
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      throw ApiError.unauthorized('请先登录');
+    let token: string | undefined;
+    if (authHeader?.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+    } else if (queryToken) {
+      token = queryToken;
     }
 
-    const token = authHeader.substring(7);
+    if (!token) {
+      throw ApiError.unauthorized('请先登录');
+    }
 
     try {
       const decoded = jwt.verify(token, config.jwt.secret) as {

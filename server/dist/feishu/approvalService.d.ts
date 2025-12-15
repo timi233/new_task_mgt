@@ -1,12 +1,15 @@
 export interface CreateApprovalRequest {
     workOrderId: string;
     orderNo: string;
+    orderType: string;
     customerName: string;
     description: string;
     customerContact?: string;
     customerPhone?: string;
     estimatedStartDate?: Date;
+    estimatedStartPeriod?: string;
     estimatedEndDate?: Date;
+    estimatedEndPeriod?: string;
     userId: string;
 }
 export declare enum ApprovalStatus {

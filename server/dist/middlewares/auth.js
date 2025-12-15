@@ -41,10 +41,18 @@ exports.resolveLegacyRole = resolveLegacyRole;
 const authenticate = async (req, res, next) => {
     try {
         const authHeader = req.headers.authorization;
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        // 支持从 query 参数获取 token（用于附件下载等场景）
+        const queryToken = req.query.token;
+        let token;
+        if (authHeader?.startsWith('Bearer ')) {
+            token = authHeader.substring(7);
+        }
+        else if (queryToken) {
+            token = queryToken;
+        }
+        if (!token) {
             throw errorHandler_1.ApiError.unauthorized('请先登录');
         }
-        const token = authHeader.substring(7);
         try {
             const decoded = jsonwebtoken_1.default.verify(token, config_1.config.jwt.secret);
             const user = await prisma_1.prisma.user.findUnique({

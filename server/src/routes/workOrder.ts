@@ -430,12 +430,15 @@ router.post('/:id/accept', authorize(...canManageOrders), async (req: AuthReques
           const instanceCode = await approvalService.createApprovalInstance({
             workOrderId: order.id,
             orderNo: order.orderNo,
+            orderType: order.orderType,
             customerName: order.customerName,
             description: order.description,
             customerContact: order.customerContact || undefined,
             customerPhone: order.customerPhone || undefined,
             estimatedStartDate: order.estimatedStartDate || undefined,
+            estimatedStartPeriod: order.estimatedStartPeriod || undefined,
             estimatedEndDate: order.estimatedEndDate || undefined,
+            estimatedEndPeriod: order.estimatedEndPeriod || undefined,
             userId: technician.feishuUserId,
           });
 

@@ -389,15 +389,18 @@ router.get('/trend', async (req, res, next) => {
             select: { createdAt: true, status: true },
         });
         const dailyData = {};
+        const formatDateKey = (d) => {
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        };
         for (let i = 0; i < days; i++) {
             const date = new Date(startDate);
             date.setDate(date.getDate() + i);
-            const key = date.toISOString().split('T')[0];
+            const key = formatDateKey(date);
             dailyData[key] = { created: 0, completed: 0 };
         }
         orders.forEach(order => {
             const normalizedDate = startOfDay(order.createdAt);
-            const key = normalizedDate.toISOString().split('T')[0];
+            const key = formatDateKey(normalizedDate);
             if (dailyData[key]) {
                 dailyData[key].created += 1;
                 if (order.status === 'DONE') {

@@ -7,6 +7,7 @@ async function testApproval() {
     const testData = {
         workOrderId: 'test-order-001',
         orderNo: 'CF20251202999',
+        orderType: 'CF',
         customerName: '测试客户公司',
         description: '测试服务内容：系统维护和故障排查',
         customerContact: '张三',

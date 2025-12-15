@@ -112,12 +112,18 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
 import { ArrowLeftBold, ArrowRightBold } from '@element-plus/icons-vue';
 import { scheduleApi } from '@/utils/api';
 import { useUiStore } from '@/stores/ui';
 import { useUserStore } from '@/stores/user';
 import { isAdmin, isSystemAdmin } from '@/types/enums';
 import { useRouter } from 'vue-router';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+dayjs.tz.setDefault('Asia/Shanghai');
 
 interface ScheduleDay {
   key: string;
@@ -208,17 +214,16 @@ function formatDay(date: string) {
 }
 
 function getInitialWeekStart() {
-  const now = new Date();
-  const utcMillis = now.getTime() + now.getTimezoneOffset() * 60000;
-  const utc8 = new Date(utcMillis + 8 * 60 * 60 * 1000);
-  if (utc8.getUTCDay() === 0 && utc8.getUTCHours() >= 18) {
-    utc8.setUTCDate(utc8.getUTCDate() + 1);
+  const now = dayjs().tz('Asia/Shanghai');
+  // 周日18点后显示下周
+  let target = now;
+  if (now.day() === 0 && now.hour() >= 18) {
+    target = now.add(1, 'day');
   }
-  utc8.setUTCHours(0, 0, 0, 0);
-  const weekday = utc8.getUTCDay();
+  // 计算本周一
+  const weekday = target.day();
   const diff = weekday === 0 ? -6 : 1 - weekday;
-  utc8.setUTCDate(utc8.getUTCDate() + diff);
-  return utc8.toISOString().split('T')[0];
+  return target.add(diff, 'day').format('YYYY-MM-DD');
 }
 
 const fetchSchedule = async () => {
@@ -235,9 +240,8 @@ const fetchSchedule = async () => {
 };
 
 const shiftWeek = (offset: number) => {
-  const date = new Date(`${selectedWeekStart.value}T00:00:00.000Z`);
-  date.setUTCDate(date.getUTCDate() + offset * 7);
-  selectedWeekStart.value = date.toISOString().split('T')[0];
+  const date = dayjs(selectedWeekStart.value).tz('Asia/Shanghai');
+  selectedWeekStart.value = date.add(offset * 7, 'day').format('YYYY-MM-DD');
   fetchSchedule();
 };
 

@@ -21,6 +21,7 @@ const FIELD_IDS = {
     ORDER_NO: 'widget17646459880240001', // 工单编号
     CUSTOMER_NAME: 'widget17646459981630001', // 客户名称
     DESCRIPTION: 'widget17646460011860001', // 服务内容
+    FIELD_TYPE: 'widget17657823368860001', // 外勤类型
     DATE_INTERVAL: 'widget17646460191710001', // 预计服务时间
     CONTACT_PERSON: 'widget17646460247810001', // 客户联系人
     CONTACT_PHONE: 'widget17646460277440001', // 联系电话
@@ -70,6 +71,12 @@ class ApprovalService {
                     type: 'input',
                     value: request.description,
                 },
+                // 外勤类型
+                {
+                    id: FIELD_IDS.FIELD_TYPE,
+                    type: 'input',
+                    value: request.orderType === 'CF' ? '公司外勤' : '厂家外勤',
+                },
                 // 客户联系人
                 {
                     id: FIELD_IDS.CONTACT_PERSON,
@@ -87,8 +94,21 @@ class ApprovalService {
             if (request.estimatedStartDate && request.estimatedEndDate) {
                 const startDate = new Date(request.estimatedStartDate);
                 const endDate = new Date(request.estimatedEndDate);
-                // 计算时长（天数）
-                const intervalDays = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24);
+                // 计算时长（天数）：按时段计算，上午/下午各0.5天
+                // 基础天数 = 日期差 + 1（包含首尾）
+                // 开始是下午则减0.5，结束是上午则减0.5
+                const startDateOnly = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+                const endDateOnly = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+                const daysDiff = (endDateOnly.getTime() - startDateOnly.getTime()) / (1000 * 60 * 60 * 24);
+                // 使用传入的时段字段判断，而非从时间戳解析（避免时区问题）
+                const startIsAM = request.estimatedStartPeriod === 'AM';
+                const endIsPM = request.estimatedEndPeriod === 'PM';
+                // 基础天数（包含首尾）- 首日下午开始减0.5 - 末日上午结束减0.5
+                let intervalDays = daysDiff + 1;
+                if (!startIsAM)
+                    intervalDays -= 0.5; // 下午开始，首日只算0.5天
+                if (!endIsPM)
+                    intervalDays -= 0.5; // 上午结束，末日只算0.5天
                 // 格式化为 RFC3339 格式（带时区）
                 const formatToRFC3339 = (date) => {
                     const pad = (n) => String(n).padStart(2, '0');
