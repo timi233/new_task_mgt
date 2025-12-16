@@ -367,7 +367,7 @@ router.post('/:id/accept', authorize(...canManageOrders), async (req: AuthReques
       where: { id },
       include: {
         submitter: { select: { feishuId: true } },
-        technicians: true,
+        technicians: { include: { technician: { select: { id: true, name: true } } } },
       },
     });
 
@@ -395,7 +395,7 @@ router.post('/:id/accept', authorize(...canManageOrders), async (req: AuthReques
       const messageService = new MessageService();
       try {
         await messageService.sendOrderAcceptedNotification(
-          updated,
+          { ...updated, technicians: order.technicians },
           order.submitter.feishuId,
           {
             orderId: order.id,
@@ -502,7 +502,7 @@ router.post('/:id/reject', authorize(...canManageOrders), async (req: AuthReques
       where: { id },
       include: {
         submitter: { select: { feishuId: true } },
-        technicians: true,
+        technicians: { include: { technician: { select: { id: true, name: true } } } },
       },
     });
 
@@ -522,7 +522,7 @@ router.post('/:id/reject', authorize(...canManageOrders), async (req: AuthReques
       const messageService = new MessageService();
       try {
         await messageService.sendOrderRejectedNotification(
-          updated,
+          { ...updated, technicians: order.technicians },
           order.submitter.feishuId,
           {
             orderId: order.id,
@@ -582,7 +582,10 @@ router.post('/:id/complete', authorize(...canManageOrders), async (req: AuthRequ
 
     const order = await prisma.workOrder.findUnique({
       where: { id },
-      include: { submitter: { select: { feishuId: true } } },
+      include: {
+        submitter: { select: { feishuId: true } },
+        technicians: { include: { technician: { select: { id: true, name: true } } } },
+      },
     });
 
     if (!order) throw ApiError.notFound('工单不存在');
@@ -614,7 +617,7 @@ router.post('/:id/complete', authorize(...canManageOrders), async (req: AuthRequ
       const messageService = new MessageService();
       try {
         await messageService.sendServiceCompletedNotification(
-          updated,
+          { ...updated, technicians: order.technicians },
           order.submitter.feishuId,
           {
             orderId: order.id,

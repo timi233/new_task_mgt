@@ -136,6 +136,13 @@
           show-overflow-tooltip
           align="left"
         />
+        <el-table-column
+          prop="description"
+          label="描述"
+          min-width="200"
+          show-overflow-tooltip
+          align="left"
+        />
         <el-table-column prop="orderType" label="类型" width="120" align="center">
           <template #default="{ row }">
             <el-tag size="small">{{ orderTypeText(row.orderType) }}</el-tag>

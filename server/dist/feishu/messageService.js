@@ -184,6 +184,13 @@ class MessageService {
                         },
                     ],
                 },
+                {
+                    tag: 'div',
+                    text: {
+                        tag: 'lark_md',
+                        content: `**提交人**\n${order.submitter?.name || '-'}`,
+                    },
+                },
                 ...(order.customerAddress ? [{
                         tag: 'div',
                         text: {

@@ -319,7 +319,7 @@ router.post('/:id/accept', (0, middlewares_1.authorize)(...canManageOrders), asy
             where: { id },
             include: {
                 submitter: { select: { feishuId: true } },
-                technicians: true,
+                technicians: { include: { technician: { select: { id: true, name: true } } } },
             },
         });
         if (!order)
@@ -344,7 +344,7 @@ router.post('/:id/accept', (0, middlewares_1.authorize)(...canManageOrders), asy
         if (order.submitter?.feishuId) {
             const messageService = new messageService_1.MessageService();
             try {
-                await messageService.sendOrderAcceptedNotification(updated, order.submitter.feishuId, {
+                await messageService.sendOrderAcceptedNotification({ ...updated, technicians: order.technicians }, order.submitter.feishuId, {
                     orderId: order.id,
                     orderNo: order.orderNo,
                     msgType: 'MSG-03',
@@ -446,7 +446,7 @@ router.post('/:id/reject', (0, middlewares_1.authorize)(...canManageOrders), asy
             where: { id },
             include: {
                 submitter: { select: { feishuId: true } },
-                technicians: true,
+                technicians: { include: { technician: { select: { id: true, name: true } } } },
             },
         });
         if (!order)
@@ -464,7 +464,7 @@ router.post('/:id/reject', (0, middlewares_1.authorize)(...canManageOrders), asy
         if (order.submitter?.feishuId) {
             const messageService = new messageService_1.MessageService();
             try {
-                await messageService.sendOrderRejectedNotification(updated, order.submitter.feishuId, {
+                await messageService.sendOrderRejectedNotification({ ...updated, technicians: order.technicians }, order.submitter.feishuId, {
                     orderId: order.id,
                     orderNo: order.orderNo,
                     msgType: 'MSG-04',
@@ -518,7 +518,10 @@ router.post('/:id/complete', (0, middlewares_1.authorize)(...canManageOrders), a
         const user = req.user;
         const order = await utils_1.prisma.workOrder.findUnique({
             where: { id },
-            include: { submitter: { select: { feishuId: true } } },
+            include: {
+                submitter: { select: { feishuId: true } },
+                technicians: { include: { technician: { select: { id: true, name: true } } } },
+            },
         });
         if (!order)
             throw middlewares_1.ApiError.notFound('工单不存在');
@@ -547,7 +550,7 @@ router.post('/:id/complete', (0, middlewares_1.authorize)(...canManageOrders), a
         if (order.submitter?.feishuId) {
             const messageService = new messageService_1.MessageService();
             try {
-                await messageService.sendServiceCompletedNotification(updated, order.submitter.feishuId, {
+                await messageService.sendServiceCompletedNotification({ ...updated, technicians: order.technicians }, order.submitter.feishuId, {
                     orderId: order.id,
                     orderNo: order.orderNo,
                     msgType: 'MSG-05',
