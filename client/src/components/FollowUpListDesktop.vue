@@ -35,12 +35,12 @@
           <template v-for="att in note.attachments" :key="att.id">
             <el-image
               v-if="att.type === 'IMAGE'"
-              :src="getAttachmentUrl(att.id)"
+              :src="att.url"
               :preview-src-list="getImageUrls(note.attachments)"
               fit="cover"
               class="att-img"
             />
-            <el-link v-else type="primary" :href="getAttachmentUrl(att.id)" target="_blank" class="att-file">
+            <el-link v-else type="primary" :href="att.url" target="_blank" class="att-file">
               <el-icon><Document /></el-icon>
               {{ att.originalName }}
             </el-link>
@@ -105,9 +105,8 @@ const editContent = ref('');
 
 const formatTime = (time: string) => dayjs(time).format('MM-DD HH:mm');
 
-const getAttachmentUrl = (id: string) => followUpApi.getAttachmentUrl(id);
 const getImageUrls = (attachments: any[]) =>
-  attachments.filter((a: any) => a.type === 'IMAGE').map((a: any) => getAttachmentUrl(a.id));
+  attachments.filter((a: any) => a.type === 'IMAGE').map((a: any) => a.url);
 
 const fetchFollowUps = async () => {
   loading.value = true;

@@ -1,11 +1,27 @@
-import { Router, Response, NextFunction } from 'express';
+import { Router, Response, NextFunction, Request } from 'express';
 import fs from 'fs';
+import jwt from 'jsonwebtoken';
 import { authenticate, AuthRequest, ApiError } from '../middlewares';
 import { followUpUpload } from '../middlewares/upload';
 import { prisma, success } from '../utils';
 import { hasManagementRole, isSystemAdmin } from '../types';
+import { config } from '../config';
 
 const router = Router();
+
+// 附件 Token 配置
+const ATTACHMENT_TOKEN_SCOPE = 'FOLLOW_UP_ATTACHMENT';
+const ATTACHMENT_TOKEN_TTL = '5m'; // 5分钟有效期
+
+// 生成附件访问的签名 URL
+function buildAttachmentUrl(attachmentId: string, userId: string): string {
+  const token = jwt.sign(
+    { scope: ATTACHMENT_TOKEN_SCOPE, attachmentId, userId },
+    config.jwt.secret,
+    { expiresIn: ATTACHMENT_TOKEN_TTL }
+  );
+  return `/api/follow-ups/attachments/${attachmentId}?downloadToken=${token}`;
+}
 
 // 检查用户是否有权限操作该工单的跟进记录
 async function checkFollowUpAccess(user: any, workOrderId: string): Promise<boolean> {
@@ -43,8 +59,8 @@ async function requireFollowUpAccess(req: AuthRequest, res: Response, next: Next
   }
 }
 
-// 格式化附件（不暴露服务器路径）
-function formatAttachment(att: any) {
+// 格式化附件（不暴露服务器路径，生成签名URL）
+function formatAttachment(att: any, userId: string) {
   return {
     id: att.id,
     type: att.type,
@@ -52,7 +68,7 @@ function formatAttachment(att: any) {
     fileSize: att.fileSize,
     mimeType: att.mimeType,
     createdAt: att.createdAt,
-    url: `/api/follow-ups/attachments/${att.id}`,
+    url: buildAttachmentUrl(att.id, userId),
   };
 }
 
@@ -83,7 +99,7 @@ router.get('/:id/follow-ups', authenticate, async (req: AuthRequest, res: Respon
 
     const result = followUps.map(f => ({
       ...f,
-      attachments: f.attachments.map(formatAttachment),
+      attachments: f.attachments.map(att => formatAttachment(att, user.id)),
     }));
 
     success(res, result);
@@ -137,7 +153,7 @@ router.post('/:id/follow-ups', authenticate, requireFollowUpAccess, followUpUplo
 
     const result = {
       ...followUp,
-      attachments: followUp!.attachments.map(formatAttachment),
+      attachments: followUp!.attachments.map(att => formatAttachment(att, userId)),
     };
 
     success(res, result, '添加成功');
@@ -175,7 +191,7 @@ router.put('/:id/follow-ups/:noteId', authenticate, async (req: AuthRequest, res
       },
     });
 
-    success(res, { ...updated, attachments: updated.attachments.map(formatAttachment) }, '修改成功');
+    success(res, { ...updated, attachments: updated.attachments.map(att => formatAttachment(att, user.id)) }, '修改成功');
   } catch (error) {
     next(error);
   }
@@ -210,11 +226,68 @@ router.delete('/:id/follow-ups/:noteId', authenticate, async (req: AuthRequest, 
   }
 });
 
-// 下载/查看附件（通过认证的 API 端点）
-router.get('/attachments/:attachmentId', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
+// 验证附件下载 Token
+async function verifyAttachmentToken(req: Request, attachmentId: string): Promise<string> {
+  // 优先使用 downloadToken（短期签名 Token）
+  const downloadToken = req.query.downloadToken as string | undefined;
+  if (downloadToken) {
+    try {
+      const payload = jwt.verify(downloadToken, config.jwt.secret) as {
+        scope?: string;
+        attachmentId?: string;
+        userId?: string;
+      };
+
+      // 验证 Token 范围和附件 ID
+      if (payload.scope !== ATTACHMENT_TOKEN_SCOPE) {
+        throw new Error('invalid scope');
+      }
+      if (payload.attachmentId !== attachmentId) {
+        throw new Error('attachment mismatch');
+      }
+      if (!payload.userId) {
+        throw new Error('missing userId');
+      }
+
+      return payload.userId;
+    } catch {
+      throw ApiError.unauthorized('下载链接已失效，请刷新页面后重试');
+    }
+  }
+
+  // 回退到 Authorization Header 或旧的 token 参数（兼容性）
+  const authHeader = req.headers.authorization;
+  const queryToken = req.query.token as string | undefined;
+
+  let token: string | undefined;
+  if (authHeader?.startsWith('Bearer ')) {
+    token = authHeader.substring(7);
+  } else if (queryToken) {
+    token = queryToken;
+  }
+
+  if (!token) {
+    throw ApiError.unauthorized('请先登录');
+  }
+
+  try {
+    const decoded = jwt.verify(token, config.jwt.secret) as { userId?: string };
+    if (!decoded.userId) {
+      throw new Error('missing userId');
+    }
+    return decoded.userId;
+  } catch {
+    throw ApiError.unauthorized('登录已过期，请重新登录');
+  }
+}
+
+// 下载/查看附件（支持短期签名 Token 和普通认证）
+router.get('/attachments/:attachmentId', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { attachmentId } = req.params;
-    const user = req.user!;
+
+    // 验证访问权限，获取用户 ID
+    const userId = await verifyAttachmentToken(req, attachmentId);
 
     const attachment = await prisma.workOrderFollowUpAttachment.findUnique({
       where: { id: attachmentId },
@@ -222,16 +295,26 @@ router.get('/attachments/:attachmentId', authenticate, async (req: AuthRequest, 
     });
 
     if (!attachment) {
-      throw new ApiError('附件不存在', 404);
+      throw ApiError.notFound('附件不存在');
+    }
+
+    // 查询用户信息以检查工单访问权限
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true, functionalRole: true, responsibilityRole: true },
+    });
+
+    if (!user) {
+      throw ApiError.unauthorized('用户不存在');
     }
 
     const hasAccess = await checkFollowUpAccess(user, attachment.followUp.workOrderId);
     if (!hasAccess) {
-      throw new ApiError('无权下载该附件', 403);
+      throw ApiError.forbidden('无权下载该附件');
     }
 
     if (!fs.existsSync(attachment.storagePath)) {
-      throw new ApiError('文件不存在', 404);
+      throw ApiError.notFound('文件不存在');
     }
 
     // 设置正确的 Content-Type

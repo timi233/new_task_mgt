@@ -8,6 +8,7 @@
 - **部署配置灵活化**：Nginx配置移除硬编码IP，使用通配符`server_name _`和本地回环地址`127.0.0.1`，部署到新服务器时只需修改`.env`中的`WEB_URL`
 - **数据库索引优化**：为工单表添加复合索引（status/orderType/priority/createdAt、submitterId、relatedSalesId），为技术员关联表添加technicianId索引，提升查询性能
 - **统计API内存优化**：概览统计使用distinct查询替代全量数据加载，避免大数据量时内存溢出
+- **附件访问安全增强**：附件URL由服务端生成短期签名Token（5分钟有效），替代长期JWT，降低Token泄露风险
 
 ### 安全修复
 - **JWT_SECRET 启动检查**：生产环境启动时强制校验 JWT_SECRET 是否配置，防止使用默认密钥

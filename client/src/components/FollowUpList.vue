@@ -43,7 +43,7 @@
                 <van-image
                   v-if="att.type === 'IMAGE'"
                   fit="cover"
-                  :src="getAttachmentUrl(att.id)"
+                  :src="att.url"
                   class="grid-img"
                   @click="previewImages(note.attachments, att.id)"
                 />
@@ -110,7 +110,6 @@ const editingId = ref<string | null>(null);
 const editContent = ref('');
 
 const formatTime = (time: string) => dayjs(time).format('MM-DD HH:mm');
-const getAttachmentUrl = (id: string) => followUpApi.getAttachmentUrl(id);
 
 const fetchFollowUps = async () => {
   loading.value = true;
@@ -187,13 +186,13 @@ const handleUpdate = async (noteId: string) => {
 
 const previewImages = (attachments: any[], clickedId: string) => {
   const images = attachments.filter((a: any) => a.type === 'IMAGE');
-  const urls = images.map((a: any) => followUpApi.getAttachmentUrl(a.id));
+  const urls = images.map((a: any) => a.url);
   const startPosition = images.findIndex((a: any) => a.id === clickedId);
   showImagePreview({ images: urls, startPosition: Math.max(0, startPosition) });
 };
 
 const downloadFile = (att: any) => {
-  window.open(followUpApi.getAttachmentUrl(att.id), '_blank');
+  window.open(att.url, '_blank');
 };
 
 onMounted(() => {

@@ -160,8 +160,5 @@ export const followUpApi = {
   }),
   update: (workOrderId: string, noteId: string, content: string) => api.put(`/workorders/${workOrderId}/follow-ups/${noteId}`, { content }),
   delete: (workOrderId: string, noteId: string) => api.delete(`/workorders/${workOrderId}/follow-ups/${noteId}`),
-  getAttachmentUrl: (attachmentId: string) => {
-    const token = localStorage.getItem('token');
-    return `/api/follow-ups/attachments/${attachmentId}?token=${token}`;
-  },
+  // 注意：附件 URL 现在由服务端返回（带签名），不再需要客户端拼接
 };

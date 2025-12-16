@@ -5,11 +5,21 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const fs_1 = __importDefault(require("fs"));
+const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const middlewares_1 = require("../middlewares");
 const upload_1 = require("../middlewares/upload");
 const utils_1 = require("../utils");
 const types_1 = require("../types");
+const config_1 = require("../config");
 const router = (0, express_1.Router)();
+// 附件 Token 配置
+const ATTACHMENT_TOKEN_SCOPE = 'FOLLOW_UP_ATTACHMENT';
+const ATTACHMENT_TOKEN_TTL = '5m'; // 5分钟有效期
+// 生成附件访问的签名 URL
+function buildAttachmentUrl(attachmentId, userId) {
+    const token = jsonwebtoken_1.default.sign({ scope: ATTACHMENT_TOKEN_SCOPE, attachmentId, userId }, config_1.config.jwt.secret, { expiresIn: ATTACHMENT_TOKEN_TTL });
+    return `/api/follow-ups/attachments/${attachmentId}?downloadToken=${token}`;
+}
 // 检查用户是否有权限操作该工单的跟进记录
 async function checkFollowUpAccess(user, workOrderId) {
     // 管理员可以查看所有工单的跟进记录
@@ -43,8 +53,8 @@ async function requireFollowUpAccess(req, res, next) {
         next(error);
     }
 }
-// 格式化附件（不暴露服务器路径）
-function formatAttachment(att) {
+// 格式化附件（不暴露服务器路径，生成签名URL）
+function formatAttachment(att, userId) {
     return {
         id: att.id,
         type: att.type,
@@ -52,7 +62,7 @@ function formatAttachment(att) {
         fileSize: att.fileSize,
         mimeType: att.mimeType,
         createdAt: att.createdAt,
-        url: `/api/follow-ups/attachments/${att.id}`,
+        url: buildAttachmentUrl(att.id, userId),
     };
 }
 // 获取跟进记录列表
@@ -78,7 +88,7 @@ router.get('/:id/follow-ups', middlewares_1.authenticate, async (req, res, next)
         });
         const result = followUps.map(f => ({
             ...f,
-            attachments: f.attachments.map(formatAttachment),
+            attachments: f.attachments.map(att => formatAttachment(att, user.id)),
         }));
         (0, utils_1.success)(res, result);
     }
@@ -126,7 +136,7 @@ router.post('/:id/follow-ups', middlewares_1.authenticate, requireFollowUpAccess
         });
         const result = {
             ...followUp,
-            attachments: followUp.attachments.map(formatAttachment),
+            attachments: followUp.attachments.map(att => formatAttachment(att, userId)),
         };
         (0, utils_1.success)(res, result, '添加成功');
     }
@@ -158,7 +168,7 @@ router.put('/:id/follow-ups/:noteId', middlewares_1.authenticate, async (req, re
                 attachments: true,
             },
         });
-        (0, utils_1.success)(res, { ...updated, attachments: updated.attachments.map(formatAttachment) }, '修改成功');
+        (0, utils_1.success)(res, { ...updated, attachments: updated.attachments.map(att => formatAttachment(att, user.id)) }, '修改成功');
     }
     catch (error) {
         next(error);
@@ -188,24 +198,80 @@ router.delete('/:id/follow-ups/:noteId', middlewares_1.authenticate, async (req,
         next(error);
     }
 });
-// 下载/查看附件（通过认证的 API 端点）
-router.get('/attachments/:attachmentId', middlewares_1.authenticate, async (req, res, next) => {
+// 验证附件下载 Token
+async function verifyAttachmentToken(req, attachmentId) {
+    // 优先使用 downloadToken（短期签名 Token）
+    const downloadToken = req.query.downloadToken;
+    if (downloadToken) {
+        try {
+            const payload = jsonwebtoken_1.default.verify(downloadToken, config_1.config.jwt.secret);
+            // 验证 Token 范围和附件 ID
+            if (payload.scope !== ATTACHMENT_TOKEN_SCOPE) {
+                throw new Error('invalid scope');
+            }
+            if (payload.attachmentId !== attachmentId) {
+                throw new Error('attachment mismatch');
+            }
+            if (!payload.userId) {
+                throw new Error('missing userId');
+            }
+            return payload.userId;
+        }
+        catch {
+            throw middlewares_1.ApiError.unauthorized('下载链接已失效，请刷新页面后重试');
+        }
+    }
+    // 回退到 Authorization Header 或旧的 token 参数（兼容性）
+    const authHeader = req.headers.authorization;
+    const queryToken = req.query.token;
+    let token;
+    if (authHeader?.startsWith('Bearer ')) {
+        token = authHeader.substring(7);
+    }
+    else if (queryToken) {
+        token = queryToken;
+    }
+    if (!token) {
+        throw middlewares_1.ApiError.unauthorized('请先登录');
+    }
+    try {
+        const decoded = jsonwebtoken_1.default.verify(token, config_1.config.jwt.secret);
+        if (!decoded.userId) {
+            throw new Error('missing userId');
+        }
+        return decoded.userId;
+    }
+    catch {
+        throw middlewares_1.ApiError.unauthorized('登录已过期，请重新登录');
+    }
+}
+// 下载/查看附件（支持短期签名 Token 和普通认证）
+router.get('/attachments/:attachmentId', async (req, res, next) => {
     try {
         const { attachmentId } = req.params;
-        const user = req.user;
+        // 验证访问权限，获取用户 ID
+        const userId = await verifyAttachmentToken(req, attachmentId);
         const attachment = await utils_1.prisma.workOrderFollowUpAttachment.findUnique({
             where: { id: attachmentId },
             include: { followUp: true },
         });
         if (!attachment) {
-            throw new middlewares_1.ApiError('附件不存在', 404);
+            throw middlewares_1.ApiError.notFound('附件不存在');
+        }
+        // 查询用户信息以检查工单访问权限
+        const user = await utils_1.prisma.user.findUnique({
+            where: { id: userId },
+            select: { id: true, role: true, functionalRole: true, responsibilityRole: true },
+        });
+        if (!user) {
+            throw middlewares_1.ApiError.unauthorized('用户不存在');
         }
         const hasAccess = await checkFollowUpAccess(user, attachment.followUp.workOrderId);
         if (!hasAccess) {
-            throw new middlewares_1.ApiError('无权下载该附件', 403);
+            throw middlewares_1.ApiError.forbidden('无权下载该附件');
         }
         if (!fs_1.default.existsSync(attachment.storagePath)) {
-            throw new middlewares_1.ApiError('文件不存在', 404);
+            throw middlewares_1.ApiError.notFound('文件不存在');
         }
         // 设置正确的 Content-Type
         res.setHeader('Content-Type', attachment.mimeType);
