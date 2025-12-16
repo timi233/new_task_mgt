@@ -82,26 +82,28 @@ router.get('/overview', async (req, res, next) => {
             ]);
         }
         else {
-            const scopedOrders = await utils_1.prisma.workOrder.findMany({
-                where,
-                select: {
-                    submitterId: true,
-                    relatedSalesId: true,
-                    technicians: {
-                        select: { technicianId: true },
-                    },
-                },
-            });
-            const technicianIds = new Set();
+            // 使用 distinct 查询替代全量加载，避免内存问题
+            const [techniciansByScope, submitters, relatedSales] = await Promise.all([
+                utils_1.prisma.workOrderTechnician.findMany({
+                    where: { workOrder: where },
+                    select: { technicianId: true },
+                    distinct: ['technicianId'],
+                }),
+                utils_1.prisma.workOrder.findMany({
+                    where,
+                    select: { submitterId: true },
+                    distinct: ['submitterId'],
+                }),
+                utils_1.prisma.workOrder.findMany({
+                    where: { ...where, relatedSalesId: { not: null } },
+                    select: { relatedSalesId: true },
+                    distinct: ['relatedSalesId'],
+                }),
+            ]);
+            totalTechnicians = techniciansByScope.length;
             const salesIds = new Set();
-            scopedOrders.forEach(order => {
-                order.technicians.forEach(t => technicianIds.add(t.technicianId));
-                if (order.relatedSalesId)
-                    salesIds.add(order.relatedSalesId);
-                if (order.submitterId)
-                    salesIds.add(order.submitterId);
-            });
-            totalTechnicians = technicianIds.size;
+            submitters.forEach(item => item.submitterId && salesIds.add(item.submitterId));
+            relatedSales.forEach(item => item.relatedSalesId && salesIds.add(item.relatedSalesId));
             totalSales = salesIds.size;
         }
         // 平均响应时间（接单时间 - 创建时间）

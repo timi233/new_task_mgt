@@ -111,27 +111,29 @@ router.get('/overview', async (req: AuthRequest, res: Response, next: NextFuncti
         }),
       ]);
     } else {
-      const scopedOrders = await prisma.workOrder.findMany({
-        where,
-        select: {
-          submitterId: true,
-          relatedSalesId: true,
-          technicians: {
-            select: { technicianId: true },
-          },
-        },
-      });
+      // 使用 distinct 查询替代全量加载，避免内存问题
+      const [techniciansByScope, submitters, relatedSales] = await Promise.all([
+        prisma.workOrderTechnician.findMany({
+          where: { workOrder: where },
+          select: { technicianId: true },
+          distinct: ['technicianId'],
+        }),
+        prisma.workOrder.findMany({
+          where,
+          select: { submitterId: true },
+          distinct: ['submitterId'],
+        }),
+        prisma.workOrder.findMany({
+          where: { ...where, relatedSalesId: { not: null } },
+          select: { relatedSalesId: true },
+          distinct: ['relatedSalesId'],
+        }),
+      ]);
 
-      const technicianIds = new Set<string>();
+      totalTechnicians = techniciansByScope.length;
       const salesIds = new Set<string>();
-
-      scopedOrders.forEach(order => {
-        order.technicians.forEach(t => technicianIds.add(t.technicianId));
-        if (order.relatedSalesId) salesIds.add(order.relatedSalesId);
-        if (order.submitterId) salesIds.add(order.submitterId);
-      });
-
-      totalTechnicians = technicianIds.size;
+      submitters.forEach(item => item.submitterId && salesIds.add(item.submitterId));
+      relatedSales.forEach(item => item.relatedSalesId && salesIds.add(item.relatedSalesId));
       totalSales = salesIds.size;
     }
 

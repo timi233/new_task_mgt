@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
+const client_1 = require("@prisma/client");
 const middlewares_1 = require("../middlewares");
 const utils_1 = require("../utils");
 const messageService_1 = require("../feishu/messageService");
@@ -8,6 +9,8 @@ const approvalService_1 = require("../feishu/approvalService");
 const types_1 = require("../types");
 const router = (0, express_1.Router)();
 const log = (0, utils_1.createModuleLogger)(utils_1.LogModule.WORK_ORDER);
+// 工单编号生成冲突重试次数
+const ORDER_NO_RETRY_LIMIT = 5;
 router.use(middlewares_1.authenticate);
 // 定义可查看工单的角色（不包括 OTHER）
 const canViewOrders = [types_1.Role.SYSTEM_ADMIN, types_1.Role.ADMIN, types_1.Role.SALES, types_1.Role.TECHNICIAN, types_1.Role.AUDITOR];
@@ -240,52 +243,71 @@ router.post('/', (0, middlewares_1.authorize)(...canManageOrders), async (req, r
         if (orderType === types_1.OrderType.CO && user.role === types_1.Role.TECHNICIAN && !relatedSalesId) {
             throw middlewares_1.ApiError.badRequest('技术员提交公司内勤工单需要选择关联销售');
         }
-        // 生成工单编号
-        const orderNo = await (0, utils_1.generateOrderNo)(orderType);
         // 根据类型确定初始状态
         const isOffice = (0, types_1.isOfficeOrder)(orderType);
         const initialStatus = isOffice ? types_1.OrderStatus.IN_SERVICE : types_1.OrderStatus.PENDING;
-        // 创建工单
-        const order = await utils_1.prisma.workOrder.create({
-            data: {
-                orderNo,
-                orderType,
-                submitterId: user.id,
-                relatedSalesId: orderType === types_1.OrderType.CO && user.role === types_1.Role.TECHNICIAN ? relatedSalesId : null,
-                customerName,
-                customerContact,
-                customerPhone,
-                hasChannel: (0, types_1.isCompanyOrder)(orderType) ? hasChannel : false,
-                channelName: (0, types_1.isCompanyOrder)(orderType) && hasChannel ? channelName : null,
-                channelContact: (0, types_1.isCompanyOrder)(orderType) && hasChannel ? channelContact : null,
-                channelPhone: (0, types_1.isCompanyOrder)(orderType) && hasChannel ? channelPhone : null,
-                manufacturerContact: (0, types_1.isManufacturerOrder)(orderType) ? manufacturerContact : null,
-                workType: (0, types_1.isCompanyOrder)(orderType) ? workType : null,
-                priority,
-                description,
-                status: initialStatus,
-                estimatedDate: estimatedDate ? new Date(estimatedDate) : null,
-                estimatedPeriod,
-                estimatedStartDate: estimatedStartDate ? buildDateTime(estimatedStartDate, estimatedStartPeriod, 'start') : null,
-                estimatedStartPeriod,
-                estimatedEndDate: estimatedEndDate ? buildDateTime(estimatedEndDate, estimatedEndPeriod, 'end') : null,
-                estimatedEndPeriod,
-                startedAt: isOffice ? new Date() : null,
-                technicians: {
-                    create: technicianIds.map((techId) => ({
-                        technicianId: techId,
-                    })),
-                },
-            },
-            include: {
-                submitter: { select: { id: true, name: true } },
-                technicians: {
-                    include: {
-                        technician: { select: { id: true, name: true, feishuId: true } },
+        // 创建工单（带重试机制，处理编号冲突）
+        let order;
+        for (let attempt = 0; attempt < ORDER_NO_RETRY_LIMIT; attempt++) {
+            const orderNo = await (0, utils_1.generateOrderNo)(orderType);
+            try {
+                order = await utils_1.prisma.workOrder.create({
+                    data: {
+                        orderNo,
+                        orderType,
+                        submitterId: user.id,
+                        relatedSalesId: orderType === types_1.OrderType.CO && user.role === types_1.Role.TECHNICIAN ? relatedSalesId : null,
+                        customerName,
+                        customerContact,
+                        customerPhone,
+                        hasChannel: (0, types_1.isCompanyOrder)(orderType) ? hasChannel : false,
+                        channelName: (0, types_1.isCompanyOrder)(orderType) && hasChannel ? channelName : null,
+                        channelContact: (0, types_1.isCompanyOrder)(orderType) && hasChannel ? channelContact : null,
+                        channelPhone: (0, types_1.isCompanyOrder)(orderType) && hasChannel ? channelPhone : null,
+                        manufacturerContact: (0, types_1.isManufacturerOrder)(orderType) ? manufacturerContact : null,
+                        workType: (0, types_1.isCompanyOrder)(orderType) ? workType : null,
+                        priority,
+                        description,
+                        status: initialStatus,
+                        estimatedDate: estimatedDate ? new Date(estimatedDate) : null,
+                        estimatedPeriod,
+                        estimatedStartDate: estimatedStartDate ? buildDateTime(estimatedStartDate, estimatedStartPeriod, 'start') : null,
+                        estimatedStartPeriod,
+                        estimatedEndDate: estimatedEndDate ? buildDateTime(estimatedEndDate, estimatedEndPeriod, 'end') : null,
+                        estimatedEndPeriod,
+                        startedAt: isOffice ? new Date() : null,
+                        technicians: {
+                            create: technicianIds.map((techId) => ({
+                                technicianId: techId,
+                            })),
+                        },
                     },
-                },
-            },
-        });
+                    include: {
+                        submitter: { select: { id: true, name: true } },
+                        technicians: {
+                            include: {
+                                technician: { select: { id: true, name: true, feishuId: true } },
+                            },
+                        },
+                    },
+                });
+                break; // 成功则退出循环
+            }
+            catch (error) {
+                // P2002 是 Prisma 的唯一约束冲突错误码
+                if (error instanceof client_1.Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+                    log.warn('检测到工单编号冲突，准备重试', { orderType, orderNo, attempt: attempt + 1 });
+                    if (attempt === ORDER_NO_RETRY_LIMIT - 1) {
+                        throw middlewares_1.ApiError.internal('生成工单编号失败，请稍后重试');
+                    }
+                    continue;
+                }
+                throw error;
+            }
+        }
+        if (!order) {
+            throw middlewares_1.ApiError.internal('创建工单失败');
+        }
         // 保存客户记录（用于联想输入）
         await saveCustomerRecord(customerName, customerContact, customerPhone);
         // 保存渠道记录
@@ -740,12 +762,11 @@ async function saveCustomerRecord(name, contactPerson, contactPhone) {
         });
     }
     catch (error) {
-        // TODO: 待 logger 中央脱敏完成后，评估是否需要脱敏处理联系人/电话信息
         log.error('保存客户记录失败', {
             error,
-            name,
-            contactPerson,
-            contactPhone,
+            name: maskName(name),
+            contactPerson: maskName(contactPerson),
+            contactPhone: maskPhone(contactPhone),
         });
     }
 }
@@ -766,12 +787,11 @@ async function saveChannelRecord(name, contactPerson, contactPhone) {
         });
     }
     catch (error) {
-        // TODO: 待 logger 中央脱敏完成后，评估是否需要脱敏处理联系人/电话信息
         log.error('保存渠道记录失败', {
             error,
-            name,
-            contactPerson,
-            contactPhone,
+            name: maskName(name),
+            contactPerson: maskName(contactPerson),
+            contactPhone: maskPhone(contactPhone),
         });
     }
 }
@@ -788,12 +808,24 @@ async function saveManufacturerContactRecord(name) {
         });
     }
     catch (error) {
-        // TODO: 待 logger 中央脱敏完成后，评估是否需要脱敏处理联系人姓名
         log.error('保存厂家对接人记录失败', {
             error,
-            name,
+            name: maskName(name),
         });
     }
+}
+// ============ 日志脱敏函数 ============
+function maskName(value) {
+    if (!value)
+        return value;
+    if (value.length <= 1)
+        return `${value}*`;
+    return `${value[0]}${'*'.repeat(Math.min(value.length - 1, 3))}`;
+}
+function maskPhone(value) {
+    if (!value)
+        return value;
+    return value.replace(/(\d{3})\d*(\d{2})/, '$1****$2');
 }
 exports.default = router;
 //# sourceMappingURL=workOrder.js.map
