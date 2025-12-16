@@ -11,6 +11,34 @@ const middlewares_1 = require("../middlewares");
 const feishuService_1 = require("../feishu/feishuService");
 const types_1 = require("../types");
 const router = (0, express_1.Router)();
+// Cookie 配置
+const AUTH_COOKIE_NAME = 'dispatch_token';
+const COOKIE_MAX_AGE = (() => {
+    const match = /^(\d+)([smhd])$/.exec(config_1.config.jwt.expiresIn);
+    if (!match)
+        return 7 * 24 * 60 * 60 * 1000; // 默认7天
+    const amount = parseInt(match[1], 10);
+    const unit = match[2];
+    const factor = unit === 's' ? 1000 : unit === 'm' ? 60000 : unit === 'h' ? 3600000 : 86400000;
+    return amount * factor;
+})();
+// 设置认证 Cookie
+function setAuthCookie(res, token) {
+    res.cookie(AUTH_COOKIE_NAME, token, {
+        httpOnly: true,
+        secure: !config_1.config.isDev, // 生产环境使用 HTTPS
+        sameSite: 'lax',
+        path: '/',
+        maxAge: COOKIE_MAX_AGE,
+    });
+}
+// 清除认证 Cookie
+function clearAuthCookie(res) {
+    res.clearCookie(AUTH_COOKIE_NAME, {
+        path: '/',
+        sameSite: 'lax',
+    });
+}
 // 飞书OAuth登录
 router.post('/feishu/login', async (req, res, next) => {
     try {
@@ -55,8 +83,10 @@ router.post('/feishu/login', async (req, res, next) => {
         }
         // 生成JWT
         const token = jsonwebtoken_1.default.sign({ userId: user.id, feishuId: user.feishuId }, config_1.config.jwt.secret, { expiresIn: config_1.config.jwt.expiresIn });
+        // 设置 HttpOnly Cookie
+        setAuthCookie(res, token);
         (0, utils_1.success)(res, {
-            token,
+            token, // 保持返回 token 以兼容现有前端
             user: {
                 id: user.id,
                 name: user.name,
@@ -86,20 +116,38 @@ router.post('/refresh', async (req, res, next) => {
             throw middlewares_1.ApiError.unauthorized('用户不存在或已禁用');
         }
         const newToken = jsonwebtoken_1.default.sign({ userId: user.id, feishuId: user.feishuId }, config_1.config.jwt.secret, { expiresIn: config_1.config.jwt.expiresIn });
+        // 设置新的 HttpOnly Cookie
+        setAuthCookie(res, newToken);
         (0, utils_1.success)(res, { token: newToken }, 'Token刷新成功');
     }
     catch (error) {
         next(error);
     }
 });
+// 从请求中获取 Token（支持 Cookie 和 Authorization Header）
+function getTokenFromRequest(req) {
+    // 优先从 Authorization Header 获取
+    const authHeader = req.headers.authorization;
+    if (authHeader?.startsWith('Bearer ')) {
+        return authHeader.substring(7);
+    }
+    // 从 Cookie 获取
+    const cookies = req.headers.cookie;
+    if (cookies) {
+        const match = cookies.split(';').find(c => c.trim().startsWith(`${AUTH_COOKIE_NAME}=`));
+        if (match) {
+            return decodeURIComponent(match.split('=')[1]);
+        }
+    }
+    return undefined;
+}
 // 获取当前用户信息
 router.get('/me', async (req, res, next) => {
     try {
-        const authHeader = req.headers.authorization;
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        const token = getTokenFromRequest(req);
+        if (!token) {
             throw middlewares_1.ApiError.unauthorized('请先登录');
         }
-        const token = authHeader.substring(7);
         const decoded = jsonwebtoken_1.default.verify(token, config_1.config.jwt.secret);
         const user = await utils_1.prisma.user.findUnique({
             where: { id: decoded.userId },
@@ -124,8 +172,9 @@ router.get('/me', async (req, res, next) => {
         next(error);
     }
 });
-// 退出登录（前端清除token即可，这里只是占位）
+// 退出登录
 router.post('/logout', (req, res) => {
+    clearAuthCookie(res);
     (0, utils_1.success)(res, null, '退出成功');
 });
 exports.default = router;

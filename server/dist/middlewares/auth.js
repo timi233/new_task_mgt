@@ -13,6 +13,30 @@ const config_1 = require("../config");
 const errorHandler_1 = require("./errorHandler");
 const prisma_1 = require("../utils/prisma");
 const types_1 = require("../types");
+// Cookie 名称（与 auth.ts 保持一致）
+const AUTH_COOKIE_NAME = 'dispatch_token';
+// 从请求中获取 Token（支持多种来源）
+function getTokenFromRequest(req) {
+    // 1. 优先从 Authorization Header 获取
+    const authHeader = req.headers.authorization;
+    if (authHeader?.startsWith('Bearer ')) {
+        return authHeader.substring(7);
+    }
+    // 2. 从 Cookie 获取
+    const cookies = req.headers.cookie;
+    if (cookies) {
+        const match = cookies.split(';').find(c => c.trim().startsWith(`${AUTH_COOKIE_NAME}=`));
+        if (match) {
+            return decodeURIComponent(match.split('=')[1]);
+        }
+    }
+    // 3. 从 URL query 参数获取（用于旧的附件下载兼容）
+    const queryToken = req.query.token;
+    if (queryToken) {
+        return queryToken;
+    }
+    return undefined;
+}
 const resolveLegacyRole = (payload) => {
     // 优先检查 responsibilityRole（新的权限模型）
     if (payload.responsibilityRole === types_1.ResponsibilityRole.SYSTEM_ADMIN) {
@@ -40,16 +64,7 @@ const resolveLegacyRole = (payload) => {
 exports.resolveLegacyRole = resolveLegacyRole;
 const authenticate = async (req, res, next) => {
     try {
-        const authHeader = req.headers.authorization;
-        // 支持从 query 参数获取 token（用于附件下载等场景）
-        const queryToken = req.query.token;
-        let token;
-        if (authHeader?.startsWith('Bearer ')) {
-            token = authHeader.substring(7);
-        }
-        else if (queryToken) {
-            token = queryToken;
-        }
+        const token = getTokenFromRequest(req);
         if (!token) {
             throw errorHandler_1.ApiError.unauthorized('请先登录');
         }

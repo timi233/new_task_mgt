@@ -5,11 +5,13 @@ import router from '@/router';
 export const api = axios.create({
   baseURL: '/api',
   timeout: 10000,
+  withCredentials: true, // 启用 Cookie 发送
 });
 
 // 请求拦截器
 api.interceptors.request.use(
   (config) => {
+    // 从 localStorage 获取 token（兼容过渡期）
     const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
