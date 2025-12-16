@@ -13,6 +13,30 @@ router.use(middlewares_1.authenticate);
 const canViewOrders = [types_1.Role.SYSTEM_ADMIN, types_1.Role.ADMIN, types_1.Role.SALES, types_1.Role.TECHNICIAN, types_1.Role.AUDITOR];
 // 定义可管理工单的角色（不包括 AUDITOR 和 OTHER）
 const canManageOrders = [types_1.Role.SYSTEM_ADMIN, types_1.Role.ADMIN, types_1.Role.SALES, types_1.Role.TECHNICIAN];
+/**
+ * 检查用户是否有权操作指定工单
+ * - 管理员角色可操作所有工单
+ * - 非管理员只能操作：自己提交的、自己是关联销售的、自己是被分配技术员的工单
+ * @throws ApiError 如果用户无权限或工单不存在
+ */
+function ensureCanOperate(order, user) {
+    if (!user) {
+        throw middlewares_1.ApiError.unauthorized('请先登录');
+    }
+    if (!order) {
+        throw middlewares_1.ApiError.notFound('工单不存在');
+    }
+    // 管理员可操作所有工单
+    if ((0, types_1.hasManagementRole)(user)) {
+        return;
+    }
+    const isSubmitter = order.submitterId === user.id;
+    const isRelatedSales = order.relatedSalesId === user.id;
+    const isTechnicianAssigned = order.technicians?.some(t => t.technicianId === user.id);
+    if (!isSubmitter && !isRelatedSales && !isTechnicianAssigned) {
+        throw middlewares_1.ApiError.forbidden('无权操作该工单');
+    }
+}
 // 工单列表
 router.get('/', (0, middlewares_1.authorize)(...canViewOrders), async (req, res, next) => {
     try {
@@ -170,9 +194,8 @@ router.get('/:id', (0, middlewares_1.authorize)(...canViewOrders), async (req, r
                 evaluation: true,
             },
         });
-        if (!order) {
-            throw middlewares_1.ApiError.notFound('工单不存在');
-        }
+        // 检查权限
+        ensureCanOperate(order, req.user);
         // 转换技术员格式
         const orderWithTechnicians = {
             ...order,
@@ -322,17 +345,10 @@ router.post('/:id/accept', (0, middlewares_1.authorize)(...canManageOrders), asy
                 technicians: { include: { technician: { select: { id: true, name: true } } } },
             },
         });
-        if (!order)
-            throw middlewares_1.ApiError.notFound('工单不存在');
+        // 检查权限
+        ensureCanOperate(order, user);
         if (order.status !== types_1.OrderStatus.PENDING)
             throw middlewares_1.ApiError.badRequest('工单状态不正确');
-        // 验证是否是分配的技术员
-        if (user.role === types_1.Role.TECHNICIAN) {
-            const isAssigned = order.technicians.some(t => t.technicianId === user.id);
-            if (!isAssigned) {
-                throw middlewares_1.ApiError.forbidden('只能接受分配给自己的工单');
-            }
-        }
         const updated = await utils_1.prisma.workOrder.update({
             where: { id },
             data: {
@@ -492,9 +508,12 @@ router.post('/:id/reject', (0, middlewares_1.authorize)(...canManageOrders), asy
 router.post('/:id/start', (0, middlewares_1.authorize)(...canManageOrders), async (req, res, next) => {
     try {
         const { id } = req.params;
-        const order = await utils_1.prisma.workOrder.findUnique({ where: { id } });
-        if (!order)
-            throw middlewares_1.ApiError.notFound('工单不存在');
+        const order = await utils_1.prisma.workOrder.findUnique({
+            where: { id },
+            include: { technicians: true },
+        });
+        // 检查权限
+        ensureCanOperate(order, req.user);
         if (order.status !== types_1.OrderStatus.ACCEPTED)
             throw middlewares_1.ApiError.badRequest('请先确认接单');
         const updated = await utils_1.prisma.workOrder.update({
@@ -523,8 +542,8 @@ router.post('/:id/complete', (0, middlewares_1.authorize)(...canManageOrders), a
                 technicians: { include: { technician: { select: { id: true, name: true } } } },
             },
         });
-        if (!order)
-            throw middlewares_1.ApiError.notFound('工单不存在');
+        // 检查权限
+        ensureCanOperate(order, user);
         if (order.status !== types_1.OrderStatus.IN_SERVICE)
             throw middlewares_1.ApiError.badRequest('工单状态不正确');
         if (!serviceSummary) {
@@ -579,9 +598,12 @@ router.post('/:id/cancel', (0, middlewares_1.authorize)(...canManageOrders), asy
     try {
         const { id } = req.params;
         const { reason } = req.body;
-        const order = await utils_1.prisma.workOrder.findUnique({ where: { id } });
-        if (!order)
-            throw middlewares_1.ApiError.notFound('工单不存在');
+        const order = await utils_1.prisma.workOrder.findUnique({
+            where: { id },
+            include: { technicians: true },
+        });
+        // 检查权限
+        ensureCanOperate(order, req.user);
         if (order.status === types_1.OrderStatus.DONE)
             throw middlewares_1.ApiError.badRequest('已完成的工单无法取消');
         const updated = await utils_1.prisma.workOrder.update({
@@ -603,9 +625,12 @@ router.post('/:id/evaluate', (0, middlewares_1.authorize)(...canManageOrders), a
         const { id } = req.params;
         const { qualityRating, responseRating, customerFeedback, improvementSuggestion, recommend } = req.body;
         const user = req.user;
-        const order = await utils_1.prisma.workOrder.findUnique({ where: { id } });
-        if (!order)
-            throw middlewares_1.ApiError.notFound('工单不存在');
+        const order = await utils_1.prisma.workOrder.findUnique({
+            where: { id },
+            include: { technicians: true },
+        });
+        // 检查权限
+        ensureCanOperate(order, user);
         if (order.status !== types_1.OrderStatus.DONE)
             throw middlewares_1.ApiError.badRequest('工单未完成，无法评价');
         // 检查是否已评价

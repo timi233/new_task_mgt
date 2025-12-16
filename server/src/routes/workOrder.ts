@@ -16,6 +16,43 @@ const canViewOrders = [Role.SYSTEM_ADMIN, Role.ADMIN, Role.SALES, Role.TECHNICIA
 // 定义可管理工单的角色（不包括 AUDITOR 和 OTHER）
 const canManageOrders = [Role.SYSTEM_ADMIN, Role.ADMIN, Role.SALES, Role.TECHNICIAN];
 
+// 工单权限类型定义
+type WorkOrderWithRelations = {
+  submitterId: string;
+  relatedSalesId: string | null;
+  technicians: { technicianId: string }[];
+};
+
+/**
+ * 检查用户是否有权操作指定工单
+ * - 管理员角色可操作所有工单
+ * - 非管理员只能操作：自己提交的、自己是关联销售的、自己是被分配技术员的工单
+ * @throws ApiError 如果用户无权限或工单不存在
+ */
+function ensureCanOperate<T extends WorkOrderWithRelations>(
+  order: T | null,
+  user: AuthRequest['user']
+): asserts order is T {
+  if (!user) {
+    throw ApiError.unauthorized('请先登录');
+  }
+  if (!order) {
+    throw ApiError.notFound('工单不存在');
+  }
+  // 管理员可操作所有工单
+  if (hasManagementRole(user)) {
+    return;
+  }
+
+  const isSubmitter = order.submitterId === user.id;
+  const isRelatedSales = order.relatedSalesId === user.id;
+  const isTechnicianAssigned = order.technicians?.some(t => t.technicianId === user.id);
+
+  if (!isSubmitter && !isRelatedSales && !isTechnicianAssigned) {
+    throw ApiError.forbidden('无权操作该工单');
+  }
+}
+
 // 工单列表
 router.get('/', authorize(...canViewOrders), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
@@ -186,9 +223,8 @@ router.get('/:id', authorize(...canViewOrders), async (req: AuthRequest, res: Re
       },
     });
 
-    if (!order) {
-      throw ApiError.notFound('工单不存在');
-    }
+    // 检查权限
+    ensureCanOperate(order, req.user);
 
     // 转换技术员格式
     const orderWithTechnicians = {
@@ -371,16 +407,9 @@ router.post('/:id/accept', authorize(...canManageOrders), async (req: AuthReques
       },
     });
 
-    if (!order) throw ApiError.notFound('工单不存在');
+    // 检查权限
+    ensureCanOperate(order, user);
     if (order.status !== OrderStatus.PENDING) throw ApiError.badRequest('工单状态不正确');
-
-    // 验证是否是分配的技术员
-    if (user.role === Role.TECHNICIAN) {
-      const isAssigned = order.technicians.some(t => t.technicianId === user.id);
-      if (!isAssigned) {
-        throw ApiError.forbidden('只能接受分配给自己的工单');
-      }
-    }
 
     const updated = await prisma.workOrder.update({
       where: { id },
@@ -555,8 +584,13 @@ router.post('/:id/start', authorize(...canManageOrders), async (req: AuthRequest
   try {
     const { id } = req.params;
 
-    const order = await prisma.workOrder.findUnique({ where: { id } });
-    if (!order) throw ApiError.notFound('工单不存在');
+    const order = await prisma.workOrder.findUnique({
+      where: { id },
+      include: { technicians: true },
+    });
+
+    // 检查权限
+    ensureCanOperate(order, req.user);
     if (order.status !== OrderStatus.ACCEPTED) throw ApiError.badRequest('请先确认接单');
 
     const updated = await prisma.workOrder.update({
@@ -588,7 +622,8 @@ router.post('/:id/complete', authorize(...canManageOrders), async (req: AuthRequ
       },
     });
 
-    if (!order) throw ApiError.notFound('工单不存在');
+    // 检查权限
+    ensureCanOperate(order, user);
     if (order.status !== OrderStatus.IN_SERVICE) throw ApiError.badRequest('工单状态不正确');
 
     if (!serviceSummary) {
@@ -650,8 +685,13 @@ router.post('/:id/cancel', authorize(...canManageOrders), async (req: AuthReques
     const { id } = req.params;
     const { reason } = req.body;
 
-    const order = await prisma.workOrder.findUnique({ where: { id } });
-    if (!order) throw ApiError.notFound('工单不存在');
+    const order = await prisma.workOrder.findUnique({
+      where: { id },
+      include: { technicians: true },
+    });
+
+    // 检查权限
+    ensureCanOperate(order, req.user);
     if (order.status === OrderStatus.DONE) throw ApiError.badRequest('已完成的工单无法取消');
 
     const updated = await prisma.workOrder.update({
@@ -675,8 +715,13 @@ router.post('/:id/evaluate', authorize(...canManageOrders), async (req: AuthRequ
     const { qualityRating, responseRating, customerFeedback, improvementSuggestion, recommend } = req.body;
     const user = req.user!;
 
-    const order = await prisma.workOrder.findUnique({ where: { id } });
-    if (!order) throw ApiError.notFound('工单不存在');
+    const order = await prisma.workOrder.findUnique({
+      where: { id },
+      include: { technicians: true },
+    });
+
+    // 检查权限
+    ensureCanOperate(order, user);
     if (order.status !== OrderStatus.DONE) throw ApiError.badRequest('工单未完成，无法评价');
 
     // 检查是否已评价

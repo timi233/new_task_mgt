@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import crypto from 'crypto';
 import { prisma, success } from '../utils';
 import { ApprovalService, ApprovalStatus } from '../feishu/approvalService';
 import { config } from '../config';
@@ -6,18 +7,65 @@ import { config } from '../config';
 const router = Router();
 
 /**
+ * 验证飞书回调签名
+ */
+function verifyFeishuSignature(req: Request): boolean {
+  const { encryptKey, verificationToken } = config.feishu;
+
+  // 如果配置了 encryptKey，使用签名验证
+  if (encryptKey) {
+    const timestamp = req.headers['x-lark-request-timestamp'] as string | undefined;
+    const nonce = req.headers['x-lark-request-nonce'] as string | undefined;
+    const signature = req.headers['x-lark-signature'] as string | undefined;
+
+    if (!timestamp || !nonce || !signature) {
+      return false;
+    }
+
+    const body = JSON.stringify(req.body);
+    const baseString = `${timestamp}${nonce}${encryptKey}${body}`;
+    const expected = crypto
+      .createHash('sha256')
+      .update(baseString)
+      .digest('hex');
+
+    if (signature !== expected) {
+      return false;
+    }
+  }
+
+  // 验证 token（v1 事件或 url_verification）
+  const bodyToken = req.body?.token || req.body?.header?.token;
+  if (verificationToken && bodyToken && bodyToken !== verificationToken) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
  * 飞书事件回调接口
  * 用于接收审批状态变更等事件
  */
 router.post('/event', async (req: Request, res: Response, next: NextFunction) => {
   try {
+    // 验证签名
+    if (!verifyFeishuSignature(req)) {
+      console.warn('[飞书回调] 验签失败');
+      return res.status(403).json({ code: 1002, msg: 'invalid signature' });
+    }
+
     const { type, event } = req.body;
 
     console.log('[飞书回调] 收到事件:', type);
 
     // URL验证（飞书首次配置回调URL时会发送）
     if (type === 'url_verification') {
-      const { challenge } = req.body;
+      const { challenge, token } = req.body;
+      // 再次验证 token
+      if (config.feishu.verificationToken && token !== config.feishu.verificationToken) {
+        return res.status(403).json({ code: 1002, msg: 'invalid token' });
+      }
       return res.json({ challenge });
     }
 
