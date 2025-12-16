@@ -1,6 +1,6 @@
 import { Router, Response, NextFunction } from 'express';
 import { authenticate, requireEither, AuthRequest } from '../middlewares';
-import { prisma, success } from '../utils';
+import { prisma, success, sanitizeDays } from '../utils';
 import {
   isAdmin,
   isSales,
@@ -432,8 +432,7 @@ router.get('/evaluation', async (req: AuthRequest, res: Response, next: NextFunc
 router.get('/trend', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const scope = resolveScope(req);
-    const requestedDays = parseInt(req.query.days as string) || 30;
-    const days = Math.max(requestedDays, 1);
+    const days = sanitizeDays(req.query.days as string, 30);
 
     const startOfDay = (input: Date) => {
       const normalized = new Date(input);

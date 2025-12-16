@@ -1,6 +1,6 @@
 import { Router, Response, NextFunction } from 'express';
 import { authenticate, authorize, requireResponsibility, requireEither, AuthRequest, ApiError } from '../middlewares';
-import { prisma, success, paginate } from '../utils';
+import { prisma, success, paginate, sanitizeKeyword, sanitizePagination } from '../utils';
 import { Role, UserStatus, FunctionalRole, ResponsibilityRole, FunctionalRoleType, ResponsibilityRoleType, isValidRole, isValidUserStatus, isValidFunctionalRole, isValidResponsibilityRole } from '../types';
 import { FeishuService } from '../feishu/feishuService';
 
@@ -11,9 +11,9 @@ router.use(authenticate);
 // 用户列表（系统管理员可见）
 router.get('/', authorize('SYSTEM_ADMIN'), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { page = '1', pageSize = '20', role, status, keyword } = req.query;
-    const pageNum = parseInt(page as string, 10);
-    const size = parseInt(pageSize as string, 10);
+    const { role, status } = req.query;
+    const { page: pageNum, pageSize: size } = sanitizePagination(req.query.page as string, req.query.pageSize as string);
+    const keyword = sanitizeKeyword(req.query.keyword as string);
 
     const where: any = {};
 
@@ -22,10 +22,10 @@ router.get('/', authorize('SYSTEM_ADMIN'), async (req: AuthRequest, res: Respons
 
     if (keyword) {
       where.OR = [
-        { name: { contains: keyword as string } },
-        { phone: { contains: keyword as string } },
-        { email: { contains: keyword as string } },
-        { department: { contains: keyword as string } },
+        { name: { contains: keyword } },
+        { phone: { contains: keyword } },
+        { email: { contains: keyword } },
+        { department: { contains: keyword } },
       ];
     }
 

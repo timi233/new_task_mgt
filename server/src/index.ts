@@ -5,14 +5,29 @@ import cors from 'cors';
 import helmet from 'helmet';
 import { config } from './config';
 import routes from './routes';
-import { errorHandler } from './middlewares/errorHandler';
+import { errorHandler, csrfProtection, apiLimiter } from './middlewares';
 import { requestLogger } from './middlewares/requestLogger';
 import { startFeishuWSClient, stopFeishuWSClient } from './feishu';
 
 const app: Application = express();
 
 // 安全中间件
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"], // Vue 需要
+      styleSrc: ["'self'", "'unsafe-inline'"], // Element Plus/Vant 内联样式
+      imgSrc: ["'self'", "data:", "blob:", "https:"],
+      connectSrc: ["'self'", "https://open.feishu.cn"],
+      fontSrc: ["'self'", "data:"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false, // 允许加载外部资源
+}));
 
 // CORS配置
 app.use(cors({
@@ -20,9 +35,15 @@ app.use(cors({
   credentials: true,
 }));
 
-// 解析JSON
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// CSRF 保护
+app.use('/api', csrfProtection);
+
+// API 限流
+app.use('/api', apiLimiter);
+
+// 解析JSON（限制请求体大小）
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // 请求日志
 app.use(requestLogger);

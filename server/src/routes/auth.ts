@@ -2,7 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { config } from '../config';
 import { prisma, success } from '../utils';
-import { ApiError } from '../middlewares';
+import { ApiError, loginLimiter } from '../middlewares';
 import { FeishuService } from '../feishu/feishuService';
 import { Role, UserStatus } from '../types';
 
@@ -39,7 +39,7 @@ function clearAuthCookie(res: Response) {
 }
 
 // 飞书OAuth登录
-router.post('/feishu/login', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/feishu/login', loginLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { code } = req.body;
 

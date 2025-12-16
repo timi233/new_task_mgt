@@ -40,7 +40,7 @@ function clearAuthCookie(res) {
     });
 }
 // 飞书OAuth登录
-router.post('/feishu/login', async (req, res, next) => {
+router.post('/feishu/login', middlewares_1.loginLimiter, async (req, res, next) => {
     try {
         const { code } = req.body;
         if (!code) {

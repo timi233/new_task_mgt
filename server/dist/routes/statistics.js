@@ -374,8 +374,7 @@ router.get('/evaluation', async (req, res, next) => {
 router.get('/trend', async (req, res, next) => {
     try {
         const scope = resolveScope(req);
-        const requestedDays = parseInt(req.query.days) || 30;
-        const days = Math.max(requestedDays, 1);
+        const days = (0, utils_1.sanitizeDays)(req.query.days, 30);
         const startOfDay = (input) => {
             const normalized = new Date(input);
             normalized.setHours(0, 0, 0, 0);

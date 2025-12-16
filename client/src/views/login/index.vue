@@ -87,7 +87,7 @@ onBeforeUnmount(() => {
 const handleFeishuLogin = () => {
   const redirectUri = encodeURIComponent(window.location.origin + '/login');
   const state = Math.random().toString(36).substring(7);
-  localStorage.setItem('feishu_state', state);
+  sessionStorage.setItem('feishu_state', state);
 
   const authUrl = `https://open.feishu.cn/open-apis/authen/v1/authorize?app_id=${FEISHU_APP_ID}&redirect_uri=${redirectUri}&state=${state}`;
   window.location.href = authUrl;
@@ -98,7 +98,7 @@ const checkCallback = async () => {
   const state = route.query.state as string;
 
   if (code) {
-    const savedState = localStorage.getItem('feishu_state');
+    const savedState = sessionStorage.getItem('feishu_state');
     if (state !== savedState) {
       showToast('登录验证失败，请重试');
       return;
@@ -115,7 +115,7 @@ const checkCallback = async () => {
       showToast('登录失败，请重试');
     } finally {
       loading.value = false;
-      localStorage.removeItem('feishu_state');
+      sessionStorage.removeItem('feishu_state');
     }
   }
 };

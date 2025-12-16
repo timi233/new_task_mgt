@@ -12,6 +12,13 @@ if (!jwtSecret && nodeEnv === 'production') {
   throw new Error('JWT_SECRET 未配置，禁止在生产环境启动服务');
 }
 
+// 开发环境警告
+if (!jwtSecret && nodeEnv === 'development') {
+  console.warn('[安全警告] JWT_SECRET 未配置，使用开发环境默认值');
+}
+
+const devSecret = 'dev-only-secret-do-not-use-in-production';
+
 export const config = {
   // 服务配置
   port: parseInt(process.env.PORT || '3000', 10),
@@ -23,7 +30,7 @@ export const config = {
 
   // JWT
   jwt: {
-    secret: jwtSecret || 'default-secret',
+    secret: jwtSecret || devSecret,
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
   },
 

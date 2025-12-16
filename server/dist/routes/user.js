@@ -10,9 +10,9 @@ router.use(middlewares_1.authenticate);
 // 用户列表（系统管理员可见）
 router.get('/', (0, middlewares_1.authorize)('SYSTEM_ADMIN'), async (req, res, next) => {
     try {
-        const { page = '1', pageSize = '20', role, status, keyword } = req.query;
-        const pageNum = parseInt(page, 10);
-        const size = parseInt(pageSize, 10);
+        const { role, status } = req.query;
+        const { page: pageNum, pageSize: size } = (0, utils_1.sanitizePagination)(req.query.page, req.query.pageSize);
+        const keyword = (0, utils_1.sanitizeKeyword)(req.query.keyword);
         const where = {};
         if (role)
             where.role = role;
