@@ -1,8 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ApiError = exports.errorHandler = void 0;
+const logger_1 = require("../utils/logger");
+const log = (0, logger_1.createModuleLogger)('error-handler');
 const errorHandler = (err, req, res, next) => {
-    console.error('Error:', err);
+    log.error('请求处理错误', { method: req.method, path: req.path, error: err.message, stack: err.stack });
     const statusCode = err.statusCode || 500;
     const code = err.code || 5000;
     const message = err.message || '服务器内部错误';

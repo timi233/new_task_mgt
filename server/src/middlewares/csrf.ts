@@ -1,5 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { config } from '../config';
+import { createModuleLogger } from '../utils/logger';
+
+const log = createModuleLogger('csrf');
 
 const SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS'];
 
@@ -52,7 +55,7 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction) 
   // 对于需要认证的接口，后续中间件会验证 Cookie
   // 这里允许通过，但记录警告
   if (config.isDev) {
-    console.warn(`[CSRF] 请求缺少 Origin/Referer: ${req.method} ${req.path}`);
+    log.warn('请求缺少 Origin/Referer', { method: req.method, path: req.path });
   }
 
   next();

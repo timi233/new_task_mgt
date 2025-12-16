@@ -96,8 +96,8 @@ router.get('/:id/follow-ups', middlewares_1.authenticate, async (req, res, next)
         next(error);
     }
 });
-// 添加跟进记录（权限检查在 Multer 之前）
-router.post('/:id/follow-ups', middlewares_1.authenticate, requireFollowUpAccess, upload_1.followUpUpload.array('attachments'), async (req, res, next) => {
+// 添加跟进记录（权限检查在 Multer 之前，签名校验在 Multer 之后）
+router.post('/:id/follow-ups', middlewares_1.authenticate, requireFollowUpAccess, upload_1.followUpUpload.array('attachments'), upload_1.validateFileSignatures, async (req, res, next) => {
     try {
         const { id } = req.params;
         const { content } = req.body;

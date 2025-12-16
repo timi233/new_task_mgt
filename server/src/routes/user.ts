@@ -1,9 +1,10 @@
 import { Router, Response, NextFunction } from 'express';
 import { authenticate, authorize, requireResponsibility, requireEither, AuthRequest, ApiError } from '../middlewares';
-import { prisma, success, paginate, sanitizeKeyword, sanitizePagination } from '../utils';
+import { prisma, success, paginate, sanitizeKeyword, sanitizePagination, createModuleLogger } from '../utils';
 import { Role, UserStatus, FunctionalRole, ResponsibilityRole, FunctionalRoleType, ResponsibilityRoleType, isValidRole, isValidUserStatus, isValidFunctionalRole, isValidResponsibilityRole } from '../types';
 import { FeishuService } from '../feishu/feishuService';
 
+const log = createModuleLogger('user');
 const router = Router();
 
 router.use(authenticate);
@@ -400,20 +401,20 @@ async function syncFeishuOrganization(feishuService: FeishuService): Promise<Syn
 
   try {
     // 获取飞书部门列表
-    console.log('[飞书同步] 开始获取部门列表...');
+    log.info('开始获取部门列表');
     const departments = await feishuService.getDepartments();
-    console.log(`[飞书同步] 获取到 ${departments.length} 个部门`);
+    log.info('获取部门完成', { count: departments.length });
 
     if (departments.length === 0) {
-      console.log('[飞书同步] 未获取到任何部门，请检查飞书应用权限');
+      log.warn('未获取到任何部门，请检查飞书应用权限');
       return { created: 0, skipped: 0, total: 0, newUsers: [] };
     }
 
     // 遍历每个部门，获取成员
     for (const dept of departments) {
-      console.log(`[飞书同步] 处理部门: ${dept.name} (${dept.open_department_id})`);
+      log.debug('处理部门', { name: dept.name, id: dept.open_department_id });
       const members = await feishuService.getDepartmentMembers(dept.open_department_id);
-      console.log(`[飞书同步] 部门 ${dept.name} 有 ${members.length} 个成员`);
+      log.debug('部门成员', { dept: dept.name, count: members.length });
 
       for (const member of members) {
         // 避免重复处理同一用户（可能在多个部门）
@@ -432,7 +433,7 @@ async function syncFeishuOrganization(feishuService: FeishuService): Promise<Syn
         const avatar = member.avatar?.avatar_origin || null;
 
         // find_by_department API 已返回完整用户信息，无需再调用 getUserInfo
-        console.log(`[飞书同步] 处理用户: ${member.name} (open_id: ${member.open_id})`);
+        log.debug('处理用户', { name: member.name, openId: member.open_id });
 
         // 检查用户是否已存在（多种匹配方式）
         // 1. 通过 open_id 匹配（登录时创建的用户用的是 open_id）
@@ -451,7 +452,7 @@ async function syncFeishuOrganization(feishuService: FeishuService): Promise<Syn
         if (existingUser) {
           // ⚠️ 重要变更：存在则跳过，不更新
           skipped++;
-          console.log(`[飞书同步] 跳过已存在用户: ${member.name} (ID: ${existingUser.id})`);
+          log.debug('跳过已存在用户', { name: member.name, id: existingUser.id });
           continue;
         }
 
@@ -472,16 +473,16 @@ async function syncFeishuOrganization(feishuService: FeishuService): Promise<Syn
         });
         created++;
         newUsers.push(newUser.name); // 记录新用户
-        console.log(`[飞书同步] 创建新用户: ${member.name}（无权限，待管理员分配）`);
+        log.info('创建新用户', { name: member.name });
       }
     }
 
-    console.log(`[飞书同步] 完成! 新增: ${created}, 跳过: ${skipped}, 总计: ${total}`);
+    log.info('飞书同步完成', { created, skipped, total });
     if (newUsers.length > 0) {
-      console.log(`[飞书同步] 新增用户列表: ${newUsers.join(', ')}`);
+      log.info('新增用户列表', { users: newUsers });
     }
   } catch (error) {
-    console.error('[飞书同步] 失败:', error);
+    log.error('飞书同步失败', { error });
     throw ApiError.internal('飞书同步失败，请检查配置');
   }
 

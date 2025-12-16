@@ -1,4 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
+import { createModuleLogger } from '../utils/logger';
+
+const log = createModuleLogger('http');
 
 export const requestLogger = (
   req: Request,
@@ -9,12 +12,12 @@ export const requestLogger = (
 
   res.on('finish', () => {
     const duration = Date.now() - start;
-    const log = `${new Date().toISOString()} | ${req.method} ${req.originalUrl} | ${res.statusCode} | ${duration}ms`;
+    const logData = { method: req.method, url: req.originalUrl, status: res.statusCode, duration: `${duration}ms` };
 
     if (res.statusCode >= 400) {
-      console.error(log);
+      log.warn('请求异常', logData);
     } else {
-      console.log(log);
+      log.debug('请求完成', logData);
     }
   });
 

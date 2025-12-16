@@ -1,4 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
+import { createModuleLogger } from '../utils/logger';
+
+const log = createModuleLogger('error-handler');
 
 export interface AppError extends Error {
   statusCode?: number;
@@ -11,7 +14,7 @@ export const errorHandler = (
   res: Response,
   next: NextFunction
 ) => {
-  console.error('Error:', err);
+  log.error('请求处理错误', { method: req.method, path: req.path, error: err.message, stack: err.stack });
 
   const statusCode = err.statusCode || 500;
   const code = err.code || 5000;

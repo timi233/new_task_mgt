@@ -8,6 +8,7 @@ const crypto_1 = __importDefault(require("crypto"));
 const utils_1 = require("../utils");
 const approvalService_1 = require("../feishu/approvalService");
 const config_1 = require("../config");
+const log = (0, utils_1.createModuleLogger)('feishu-callback');
 const router = (0, express_1.Router)();
 /**
  * 验证飞书回调签名
@@ -47,11 +48,11 @@ router.post('/event', async (req, res, next) => {
     try {
         // 验证签名
         if (!verifyFeishuSignature(req)) {
-            console.warn('[飞书回调] 验签失败');
+            log.warn('验签失败');
             return res.status(403).json({ code: 1002, msg: 'invalid signature' });
         }
         const { type, event } = req.body;
-        console.log('[飞书回调] 收到事件:', type);
+        log.info('收到事件', { type });
         // URL验证（飞书首次配置回调URL时会发送）
         if (type === 'url_verification') {
             const { challenge, token } = req.body;
@@ -69,7 +70,7 @@ router.post('/event', async (req, res, next) => {
         res.json({ code: 0, msg: 'success' });
     }
     catch (error) {
-        console.error('[飞书回调] 处理失败:', error);
+        log.error('处理失败', { error });
         // 即使处理失败，也要返回成功，避免飞书重试
         res.json({ code: 0, msg: 'success' });
     }
@@ -81,10 +82,10 @@ async function handleApprovalEvent(event) {
     try {
         const { instance_code, status } = event;
         if (!instance_code) {
-            console.warn('[飞书回调] 审批事件缺少instance_code');
+            log.warn('审批事件缺少instance_code');
             return;
         }
-        console.log('[飞书回调] 审批状态变更:', { instance_code, status });
+        log.info('审批状态变更', { instance_code, status });
         // 查找关联的工单
         const workOrder = await utils_1.prisma.workOrder.findFirst({
             where: {
@@ -92,7 +93,7 @@ async function handleApprovalEvent(event) {
             },
         });
         if (!workOrder) {
-            console.warn('[飞书回调] 未找到关联的工单:', instance_code);
+            log.warn('未找到关联的工单', { instance_code });
             return;
         }
         // 只处理APPROVED和REJECTED状态
@@ -100,7 +101,7 @@ async function handleApprovalEvent(event) {
             const approvalService = new approvalService_1.ApprovalService();
             const result = await approvalService.getApprovalStatus(instance_code);
             if (!result || !result.status) {
-                console.error('[飞书回调] 获取审批详情失败');
+                log.error('获取审批详情失败', { instance_code });
                 return;
             }
             // 更新工单审批状态
@@ -110,22 +111,22 @@ async function handleApprovalEvent(event) {
             if (result.status === approvalService_1.ApprovalStatus.APPROVED && result.actualHours) {
                 // 审批通过，保存实际工时
                 updateData.actualHours = result.actualHours;
-                console.log('[飞书回调] 审批通过，工时:', result.actualHours);
+                log.info('审批通过', { orderNo: workOrder.orderNo, actualHours: result.actualHours });
             }
             else if (result.status === approvalService_1.ApprovalStatus.REJECTED && result.rejectReason) {
                 // 审批拒绝，保存拒绝原因
                 updateData.approvalRejectReason = result.rejectReason;
-                console.log('[飞书回调] 审批拒绝，原因:', result.rejectReason);
+                log.info('审批拒绝', { orderNo: workOrder.orderNo, reason: result.rejectReason });
             }
             await utils_1.prisma.workOrder.update({
                 where: { id: workOrder.id },
                 data: updateData,
             });
-            console.log('[飞书回调] 工单审批状态已更新:', workOrder.orderNo);
+            log.info('工单审批状态已更新', { orderNo: workOrder.orderNo, status: result.status });
         }
     }
     catch (error) {
-        console.error('[飞书回调] 处理审批事件失败:', error);
+        log.error('处理审批事件失败', { error });
     }
 }
 exports.default = router;

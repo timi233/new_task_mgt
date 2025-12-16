@@ -2,7 +2,7 @@ import { Router, Response, NextFunction, Request } from 'express';
 import fs from 'fs';
 import jwt from 'jsonwebtoken';
 import { authenticate, AuthRequest, ApiError } from '../middlewares';
-import { followUpUpload } from '../middlewares/upload';
+import { followUpUpload, validateFileSignatures } from '../middlewares/upload';
 import { prisma, success } from '../utils';
 import { hasManagementRole, isSystemAdmin } from '../types';
 import { config } from '../config';
@@ -108,8 +108,8 @@ router.get('/:id/follow-ups', authenticate, async (req: AuthRequest, res: Respon
   }
 });
 
-// 添加跟进记录（权限检查在 Multer 之前）
-router.post('/:id/follow-ups', authenticate, requireFollowUpAccess, followUpUpload.array('attachments'), async (req: AuthRequest, res: Response, next: NextFunction) => {
+// 添加跟进记录（权限检查在 Multer 之前，签名校验在 Multer 之后）
+router.post('/:id/follow-ups', authenticate, requireFollowUpAccess, followUpUpload.array('attachments'), validateFileSignatures, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
     const { content } = req.body;

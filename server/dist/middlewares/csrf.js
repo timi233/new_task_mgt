@@ -2,6 +2,8 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.csrfProtection = csrfProtection;
 const config_1 = require("../config");
+const logger_1 = require("../utils/logger");
+const log = (0, logger_1.createModuleLogger)('csrf');
 const SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS'];
 /**
  * CSRF 保护中间件
@@ -48,7 +50,7 @@ function csrfProtection(req, res, next) {
     // 对于需要认证的接口，后续中间件会验证 Cookie
     // 这里允许通过，但记录警告
     if (config_1.config.isDev) {
-        console.warn(`[CSRF] 请求缺少 Origin/Referer: ${req.method} ${req.path}`);
+        log.warn('请求缺少 Origin/Referer', { method: req.method, path: req.path });
     }
     next();
 }

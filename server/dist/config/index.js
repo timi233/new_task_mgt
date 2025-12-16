@@ -14,9 +14,10 @@ const jwtSecret = process.env.JWT_SECRET;
 if (!jwtSecret && nodeEnv === 'production') {
     throw new Error('JWT_SECRET 未配置，禁止在生产环境启动服务');
 }
-// 开发环境警告
+// 开发环境警告（config 模块在 logger 之前加载，此处使用 console）
 if (!jwtSecret && nodeEnv === 'development') {
-    console.warn('[安全警告] JWT_SECRET 未配置，使用开发环境默认值');
+    // eslint-disable-next-line no-console
+    console.warn('[CONFIG] JWT_SECRET 未配置，使用开发环境默认值');
 }
 const devSecret = 'dev-only-secret-do-not-use-in-production';
 exports.config = {

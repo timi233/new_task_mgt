@@ -8,7 +8,9 @@ import routes from './routes';
 import { errorHandler, csrfProtection, apiLimiter } from './middlewares';
 import { requestLogger } from './middlewares/requestLogger';
 import { startFeishuWSClient, stopFeishuWSClient } from './feishu';
+import { createModuleLogger } from './utils';
 
+const log = createModuleLogger('server');
 const app: Application = express();
 
 // 安全中间件
@@ -82,42 +84,31 @@ app.use(errorHandler);
 const startServer = async () => {
   try {
     app.listen(config.port, () => {
-      console.log(`
-╔═══════════════════════════════════════════════════════╗
-║                                                       ║
-║   🚀 IT服务派工系统后端服务启动成功                    ║
-║                                                       ║
-║   环境: ${config.nodeEnv.padEnd(20)}                  ║
-║   端口: ${String(config.port).padEnd(20)}             ║
-║   地址: http://localhost:${config.port}               ║
-║                                                       ║
-╚═══════════════════════════════════════════════════════╝
-      `);
+      log.info('服务启动成功', { env: config.nodeEnv, port: config.port, url: `http://localhost:${config.port}` });
 
       // 启动飞书长连接客户端（用于接收审批事件）
       try {
-        console.log('');
         startFeishuWSClient();
       } catch (error) {
-        console.error('[飞书] 长连接客户端启动失败:', error);
-        console.warn('[飞书] 系统将继续运行，但无法接收实时审批事件');
+        log.error('飞书长连接客户端启动失败', { error });
+        log.warn('系统将继续运行，但无法接收实时审批事件');
       }
     });
   } catch (error) {
-    console.error('服务启动失败:', error);
+    log.error('服务启动失败', { error });
     process.exit(1);
   }
 };
 
 // 优雅关闭
 process.on('SIGTERM', () => {
-  console.log('收到SIGTERM信号，正在优雅关闭...');
+  log.info('收到SIGTERM信号，正在优雅关闭');
   stopFeishuWSClient();
   process.exit(0);
 });
 
 process.on('SIGINT', () => {
-  console.log('\n收到SIGINT信号，正在优雅关闭...');
+  log.info('收到SIGINT信号，正在优雅关闭');
   stopFeishuWSClient();
   process.exit(0);
 });

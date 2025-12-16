@@ -13,6 +13,8 @@ const routes_1 = __importDefault(require("./routes"));
 const middlewares_1 = require("./middlewares");
 const requestLogger_1 = require("./middlewares/requestLogger");
 const feishu_1 = require("./feishu");
+const utils_1 = require("./utils");
+const log = (0, utils_1.createModuleLogger)('server');
 const app = (0, express_1.default)();
 // 安全中间件
 app.use((0, helmet_1.default)({
@@ -74,41 +76,30 @@ app.use(middlewares_1.errorHandler);
 const startServer = async () => {
     try {
         app.listen(config_1.config.port, () => {
-            console.log(`
-╔═══════════════════════════════════════════════════════╗
-║                                                       ║
-║   🚀 IT服务派工系统后端服务启动成功                    ║
-║                                                       ║
-║   环境: ${config_1.config.nodeEnv.padEnd(20)}                  ║
-║   端口: ${String(config_1.config.port).padEnd(20)}             ║
-║   地址: http://localhost:${config_1.config.port}               ║
-║                                                       ║
-╚═══════════════════════════════════════════════════════╝
-      `);
+            log.info('服务启动成功', { env: config_1.config.nodeEnv, port: config_1.config.port, url: `http://localhost:${config_1.config.port}` });
             // 启动飞书长连接客户端（用于接收审批事件）
             try {
-                console.log('');
                 (0, feishu_1.startFeishuWSClient)();
             }
             catch (error) {
-                console.error('[飞书] 长连接客户端启动失败:', error);
-                console.warn('[飞书] 系统将继续运行，但无法接收实时审批事件');
+                log.error('飞书长连接客户端启动失败', { error });
+                log.warn('系统将继续运行，但无法接收实时审批事件');
             }
         });
     }
     catch (error) {
-        console.error('服务启动失败:', error);
+        log.error('服务启动失败', { error });
         process.exit(1);
     }
 };
 // 优雅关闭
 process.on('SIGTERM', () => {
-    console.log('收到SIGTERM信号，正在优雅关闭...');
+    log.info('收到SIGTERM信号，正在优雅关闭');
     (0, feishu_1.stopFeishuWSClient)();
     process.exit(0);
 });
 process.on('SIGINT', () => {
-    console.log('\n收到SIGINT信号，正在优雅关闭...');
+    log.info('收到SIGINT信号，正在优雅关闭');
     (0, feishu_1.stopFeishuWSClient)();
     process.exit(0);
 });
