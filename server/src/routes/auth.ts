@@ -95,7 +95,6 @@ router.post('/feishu/login', async (req: Request, res: Response, next: NextFunct
     setAuthCookie(res, token);
 
     success(res, {
-      token, // 保持返回 token 以兼容现有前端
       user: {
         id: user.id,
         name: user.name,
@@ -144,21 +143,21 @@ router.post('/refresh', async (req: Request, res: Response, next: NextFunction) 
   }
 });
 
-// 从请求中获取 Token（支持 Cookie 和 Authorization Header）
+// 从请求中获取 Token
 function getTokenFromRequest(req: Request): string | undefined {
-  // 优先从 Authorization Header 获取
-  const authHeader = req.headers.authorization;
-  if (authHeader?.startsWith('Bearer ')) {
-    return authHeader.substring(7);
-  }
-
-  // 从 Cookie 获取
+  // 优先从 Cookie 获取
   const cookies = req.headers.cookie;
   if (cookies) {
     const match = cookies.split(';').find(c => c.trim().startsWith(`${AUTH_COOKIE_NAME}=`));
     if (match) {
       return decodeURIComponent(match.split('=')[1]);
     }
+  }
+
+  // 从 Authorization Header 获取（API 调用场景）
+  const authHeader = req.headers.authorization;
+  if (authHeader?.startsWith('Bearer ')) {
+    return authHeader.substring(7);
   }
 
   return undefined;

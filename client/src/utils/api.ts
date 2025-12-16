@@ -8,21 +8,6 @@ export const api = axios.create({
   withCredentials: true, // 启用 Cookie 发送
 });
 
-// 请求拦截器
-api.interceptors.request.use(
-  (config) => {
-    // 从 localStorage 获取 token（兼容过渡期）
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
-
 // 响应拦截器
 api.interceptors.response.use(
   (response) => {
@@ -36,7 +21,6 @@ api.interceptors.response.use(
 
       switch (status) {
         case 401:
-          localStorage.removeItem('token');
           router.push({ name: 'Login' });
           showToast('登录已过期，请重新登录');
           break;

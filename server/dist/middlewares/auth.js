@@ -15,14 +15,9 @@ const prisma_1 = require("../utils/prisma");
 const types_1 = require("../types");
 // Cookie 名称（与 auth.ts 保持一致）
 const AUTH_COOKIE_NAME = 'dispatch_token';
-// 从请求中获取 Token（支持多种来源）
+// 从请求中获取 Token
 function getTokenFromRequest(req) {
-    // 1. 优先从 Authorization Header 获取
-    const authHeader = req.headers.authorization;
-    if (authHeader?.startsWith('Bearer ')) {
-        return authHeader.substring(7);
-    }
-    // 2. 从 Cookie 获取
+    // 1. 优先从 Cookie 获取
     const cookies = req.headers.cookie;
     if (cookies) {
         const match = cookies.split(';').find(c => c.trim().startsWith(`${AUTH_COOKIE_NAME}=`));
@@ -30,10 +25,10 @@ function getTokenFromRequest(req) {
             return decodeURIComponent(match.split('=')[1]);
         }
     }
-    // 3. 从 URL query 参数获取（用于旧的附件下载兼容）
-    const queryToken = req.query.token;
-    if (queryToken) {
-        return queryToken;
+    // 2. 从 Authorization Header 获取（API 调用场景）
+    const authHeader = req.headers.authorization;
+    if (authHeader?.startsWith('Bearer ')) {
+        return authHeader.substring(7);
     }
     return undefined;
 }

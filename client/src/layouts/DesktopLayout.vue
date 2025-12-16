@@ -90,7 +90,6 @@ import {
 } from '@element-plus/icons-vue';
 import { useUserStore } from '@/stores/user';
 import { isAdmin, isSystemAdmin, isSales, isTechnician } from '@/types/enums';
-import { authApi } from '@/utils/api';
 
 interface MenuItem {
   path: string;
@@ -163,8 +162,7 @@ const goHome = () => {
 };
 
 const handleLogout = async () => {
-  await authApi.logout();
-  userStore.clearToken();
+  await userStore.logout();
   router.replace('/login');
 };
 </script>
